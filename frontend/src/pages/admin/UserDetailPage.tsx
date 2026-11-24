@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, SubmitEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Ban,
@@ -11,7 +11,12 @@ import {
   UserCheck,
 } from 'lucide-react';
 import Alert from '../../components/ui/Alert';
+import Badge from '../../components/ui/Badge';
+import ButtonApp from '../../components/ui/ButtonApp';
+import ButtonLink from '../../components/ui/ButtonLink';
+import CardApp from '../../components/ui/CardApp';
 import Modal from '../../components/ui/Modal';
+import { Title } from '../../components/ui/Title';
 import { MetricsDashboard } from '../../components/metrics/MetricsDashboard';
 import DeleteUserDialog from '../../components/admin/DeleteUserDialog';
 import OneTimeLinkModal from '../../components/ui/OneTimeLinkModal';
@@ -20,6 +25,8 @@ import { useDeploymentMode } from '../../contexts/DeploymentModeContext';
 import { useUser } from '../../contexts/UserContext';
 import { errorMessage } from '../../constants/messages';
 import { useApiMutation } from '../../hooks/useApiMutation';
+import { FormSelect } from '../../components/ui/FormField';
+import { LoadingState } from '../../components/ui/LoadingState';
 import { ApiError } from '../../services/api';
 import { adminService, OwnedAppsError } from '../../services/admin';
 import type { AdminAppOption, AppAccessRole, User, UserDetail } from '../../services/admin';
@@ -92,29 +99,33 @@ function AdminAppMetricsModal({
 
 function SectionCard({ title, description, children }: SectionCardProps) {
   return (
-    <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-      <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-slate-100">{title}</h2>
-      {description && <p className="-mt-2 mb-4 text-sm leading-6 text-gray-600 dark:text-slate-400">{description}</p>}
-      {children}
+    <section aria-label={title}>
+      <CardApp className="space-y-4">
+        <div className="space-y-1">
+          <h2 className="font-display text-xl font-normal text-ink dark:text-ink-dark">{title}</h2>
+          {description && <p className="text-sm leading-6 text-fg-secondary dark:text-fg-secondary-dark">{description}</p>}
+        </div>
+        {children}
+      </CardApp>
     </section>
   );
 }
 
-const labelClass = 'text-sm text-gray-500 dark:text-slate-400';
-const valueClass = 'mt-1 break-words text-sm font-medium text-gray-900 dark:text-slate-100';
+const labelClass = 'text-xs font-medium uppercase tracking-wide text-fg-tertiary dark:text-fg-tertiary-dark';
+const valueClass = 'mt-1 break-words text-sm font-medium text-fg dark:text-fg-dark';
 
 type DetailIdentity = UserDetail['identity'];
 type DetailFallbackState = Exclude<DetailState, { readonly status: 'success' }>;
 
 function BackToUsersLink() {
   return (
-    <Link
+    <ButtonLink
+      label="Return to users"
       to="/admin/users"
-      className="inline-flex items-center gap-2 rounded text-sm font-medium text-blue-700 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-blue-300 dark:hover:text-blue-200"
-    >
-      <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-      Return to users
-    </Link>
+      variant="muted"
+      size="small"
+      icon={<ArrowLeft className="h-4 w-4" aria-hidden="true" />}
+    />
   );
 }
 
@@ -123,10 +134,7 @@ function DetailFallback({ state, onRetry }: { readonly state: DetailFallbackStat
     return (
       <div className="mx-auto max-w-5xl space-y-5">
         <BackToUsersLink />
-        <output className="flex items-center justify-center gap-3 py-12 text-gray-700 dark:text-slate-300">
-          <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" aria-hidden="true" />
-          <span>Loading user details…</span>
-        </output>
+        <LoadingState variant="page" message="Loading user details…" />
       </div>
     );
   }
@@ -135,12 +143,12 @@ function DetailFallback({ state, onRetry }: { readonly state: DetailFallbackStat
     return (
       <div className="mx-auto max-w-5xl space-y-5">
         <BackToUsersLink />
-        <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-slate-100">User not found</h1>
-          <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
+        <CardApp className="space-y-2">
+          <h1 className="font-display text-xl font-normal text-ink dark:text-ink-dark">User not found</h1>
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
             This user may have been removed or the address may be invalid.
           </p>
-        </section>
+        </CardApp>
       </div>
     );
   }
@@ -148,19 +156,10 @@ function DetailFallback({ state, onRetry }: { readonly state: DetailFallbackStat
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <BackToUsersLink />
-      <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
-        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
-          <h1 className="font-semibold">Unable to load user details</h1>
-          <p className="mt-1">{state.message}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onRetry}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          Try again
-        </button>
-      </section>
+      <CardApp>
+        <Alert type="error" title="Unable to load user details" message={state.message} />
+        <ButtonApp type="button" onClick={onRetry} label="Try again" variant="secondary" size="small" className="mt-4" />
+      </CardApp>
     </div>
   );
 }
@@ -178,27 +177,27 @@ function OwnedAppsSection({
       description="Apps this user owns. A paused app may be unavailable because the owner's plan limit was exceeded."
     >
       {apps.length === 0 ? (
-        <p className="text-sm text-gray-600 dark:text-slate-400">This user does not own any apps.</p>
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">This user does not own any apps.</p>
       ) : (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {apps.map((app) => (
-            <li key={app.app_id} className="group relative cursor-pointer rounded-lg border border-gray-200 p-4 transition-shadow hover:border-blue-400 hover:shadow-md dark:border-slate-700">
+            <li key={app.app_id} className="group relative cursor-pointer rounded-md border border-line bg-surface p-4 transition-colors hover:border-accent hover:bg-surface-hover dark:border-line-dark dark:bg-surface-dark dark:hover:bg-surface-hover-dark">
               <button
                 type="button"
                 onClick={() => onOpenMetrics(app.app_id, app.name)}
                 aria-label={`View metrics for ${appLabel(app.name, app.app_id)}`}
-                className="absolute inset-0 z-10 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset"
+                className="absolute inset-0 z-10 cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark focus-visible:ring-inset"
               />
-              <h3 className="font-semibold text-blue-700 group-hover:underline dark:text-blue-300">{unavailable(app.name)}</h3>
+              <h3 className="font-display text-base font-medium text-ink group-hover:underline dark:text-ink-dark">{unavailable(app.name)}</h3>
               <dl className="mt-3 grid grid-cols-2 gap-3">
                 <div><dt className={labelClass}>App ID</dt><dd className={valueClass}>{app.app_id}</dd></div>
                 <div>
                   <dt className={labelClass}>App availability</dt>
-                  <dd className={valueClass}>{app.is_frozen ? 'Paused by plan limit' : 'Available'}</dd>
+                  <dd className="mt-1"><Badge label={app.is_frozen ? 'Paused by plan limit' : 'Available'} variant={app.is_frozen ? 'warning' : 'success'} /></dd>
                 </div>
               </dl>
               {app.is_frozen && (
-                <p className="mt-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
+                <p className="mt-3 text-xs leading-5 text-bronze-strong dark:text-bronze-strong-dark">
                   This app is paused because the owner's plan allows fewer apps than they currently own.
                 </p>
               )}
@@ -253,7 +252,7 @@ function AppMembershipsSection({
       description="Roles here apply only to the named app; they do not change platform access."
     >
       {actionsRestricted ? (
-        <output className="mb-4 block text-sm text-gray-700 dark:text-slate-300">
+        <output className="mb-4 block text-sm text-fg-secondary dark:text-fg-secondary-dark">
           App access cannot be changed for your own or a protected omniadmin account.
         </output>
       ) : (
@@ -266,87 +265,84 @@ function AppMembershipsSection({
               className="mb-4"
             />
           )}
-          <form onSubmit={(event) => { void onGrantAccess(event); }} className="mb-5 flex flex-wrap items-end gap-3 rounded-lg bg-gray-50 p-4 dark:bg-slate-900/50">
-            <label className="min-w-48 flex-1 text-sm font-medium text-gray-700 dark:text-slate-300">
-              <span className="block">App</span>
-              <select
-                value={selectedAppId}
-                onChange={(event) => onSelectedAppIdChange(event.target.value)}
-                disabled={pendingAction !== null || selectableApps.length === 0}
-                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-              >
-                <option value="">Select an app</option>
-                {selectableApps.map((app) => (
-                  <option key={app.app_id} value={app.app_id}>
-                    {app.name || `App ${app.app_id}`} (ID {app.app_id})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-medium text-gray-700 dark:text-slate-300">
-              <span className="block">Role</span>
-              <select
-                value={selectedGrantRole}
-                onChange={(event) => {
-                  if (isAppAccessRole(event.target.value)) onSelectedAppRoleChange(event.target.value);
-                }}
-                disabled={pendingAction !== null}
-                className="mt-1 block rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-              >
-                {allowedAppRoles.map((role) => (
-                  <option key={role} value={role}>{role}</option>
-                ))}
-              </select>
-            </label>
-            <button
+          <form onSubmit={(event) => { void onGrantAccess(event); }} className="mb-5 flex flex-wrap items-end gap-3 rounded-md bg-canvas-alt p-4 dark:bg-canvas-alt-dark">
+            <FormSelect
+              label="App"
+              id="grant-app-access-app"
+              value={selectedAppId}
+              onChange={(event) => onSelectedAppIdChange(event.target.value)}
+              disabled={pendingAction !== null || selectableApps.length === 0}
+              className="min-w-48 flex-1"
+              options={[
+                { value: '', label: 'Select an app' },
+                ...selectableApps.map((app) => {
+                  const appName = app.name || `App ${app.app_id}`;
+                  return {
+                    value: app.app_id,
+                    label: `${appName} (ID ${app.app_id})`,
+                  };
+                }),
+              ]}
+            />
+            <FormSelect
+              label="Role"
+              id="grant-app-access-role"
+              value={selectedGrantRole}
+              onChange={(event) => {
+                if (isAppAccessRole(event.target.value)) onSelectedAppRoleChange(event.target.value);
+              }}
+              disabled={pendingAction !== null}
+              options={allowedAppRoles.map((role) => ({ value: role, label: role }))}
+            />
+            <ButtonApp
               type="submit"
+              label="Grant access"
+              variant="primary"
+              size="small"
               disabled={pendingAction !== null || selectedAppId === ''}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Grant access
-            </button>
-            {adminAppsError && <p className="w-full text-sm text-red-700 dark:text-red-300" role="alert">{adminAppsError}</p>}
+            />
+            {adminAppsError && <p className="w-full text-sm text-error dark:text-error-dark" role="alert">{adminAppsError}</p>}
             {!adminAppsError && adminAppsCount === 0 && (
-              <p className="w-full text-sm text-gray-600 dark:text-slate-400">No apps are available.</p>
+              <p className="w-full text-sm text-fg-secondary dark:text-fg-secondary-dark">No apps are available.</p>
             )}
             {!adminAppsError && adminAppsCount > 0 && selectableApps.length === 0 && (
-              <p className="w-full text-sm text-gray-600 dark:text-slate-400">This user already owns or has access to every app.</p>
+              <p className="w-full text-sm text-fg-secondary dark:text-fg-secondary-dark">This user already owns or has access to every app.</p>
             )}
           </form>
         </>
       )}
       {collaborations.length === 0 ? (
-        <p className="text-sm text-gray-600 dark:text-slate-400">This user has no app collaborations.</p>
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">This user has no app collaborations.</p>
       ) : (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {collaborations.map((membership) => (
-            <li key={membership.collaboration_id} className="group relative cursor-pointer rounded-lg border border-gray-200 p-4 transition-shadow hover:border-blue-400 hover:shadow-md dark:border-slate-700">
+            <li key={membership.collaboration_id} className="group relative cursor-pointer rounded-md border border-line bg-surface p-4 transition-colors hover:border-accent hover:bg-surface-hover dark:border-line-dark dark:bg-surface-dark dark:hover:bg-surface-hover-dark">
               <button
                 type="button"
                 onClick={() => onOpenMetrics(membership.app_id, membership.app_name)}
                 aria-label={`View metrics for ${appLabel(membership.app_name, membership.app_id)}`}
-                className="absolute inset-0 z-10 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset"
+                className="absolute inset-0 z-10 cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:focus-visible:ring-focus-dark focus-visible:ring-inset"
               />
-              <h3 className="font-semibold text-blue-700 group-hover:underline dark:text-blue-300">{unavailable(membership.app_name)}</h3>
+              <h3 className="font-display text-base font-medium text-ink group-hover:underline dark:text-ink-dark">{unavailable(membership.app_name)}</h3>
               <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div><dt className={labelClass}>App ID</dt><dd className={valueClass}>{membership.app_id}</dd></div>
                 <div><dt className={labelClass}>Collaboration role</dt><dd className={valueClass}>{membership.role}</dd></div>
-                <div><dt className={labelClass}>Status</dt><dd className={valueClass}>{membership.status}</dd></div>
+                <div><dt className={labelClass}>Status</dt><dd className="mt-1"><Badge label={membership.status} variant={membership.status === 'accepted' ? 'success' : 'warning'} /></dd></div>
                 <div>
                   <dt className={labelClass}>Member access</dt>
-                  <dd className={valueClass}>{membership.is_frozen ? 'Paused by app plan limit' : 'Available'}</dd>
+                  <dd className="mt-1"><Badge label={membership.is_frozen ? 'Paused by app plan limit' : 'Available'} variant={membership.is_frozen ? 'warning' : 'success'} /></dd>
                 </div>
                 <div><dt className={labelClass}>Invited</dt><dd className={valueClass}>{formatDate(membership.invited_at)}</dd></div>
                 <div><dt className={labelClass}>Accepted</dt><dd className={valueClass}>{formatDate(membership.accepted_at)}</dd></div>
               </dl>
               {membership.is_frozen && (
-                <p className="mt-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
+                <p className="mt-3 text-xs leading-5 text-bronze-strong dark:text-bronze-strong-dark">
                   This member's access is paused because the app has exceeded its plan's collaborator limit.
                 </p>
               )}
               {!actionsRestricted && (
-                <div className="relative z-20 mt-4 flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3 dark:border-slate-700">
-                  <label className="text-sm text-gray-700 dark:text-slate-300">
+                <div className="relative z-20 mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-3 dark:border-line-dark">
+                  <label className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
                     <span className="mr-2">Set role</span>
                     <select
                       aria-label={`Role for ${appLabel(membership.app_name, membership.app_id)}`}
@@ -357,7 +353,7 @@ function AppMembershipsSection({
                         }
                       }}
                       disabled={pendingAction !== null}
-                      className="ml-2 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      className="ml-2 rounded-md border border-line-strong bg-surface px-2 py-1 text-sm text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:border-line-strong-dark dark:bg-surface-dark dark:text-fg-dark dark:focus-visible:ring-focus-dark"
                     >
                       {(!isAppAccessRole(membership.role) || !allowedAppRoles.includes(membership.role)) && (
                         <option value={membership.role}>{membership.role} (legacy)</option>
@@ -367,14 +363,14 @@ function AppMembershipsSection({
                       ))}
                     </select>
                   </label>
-                  <button
+                  <ButtonApp
                     type="button"
                     onClick={() => { void onRemoveAppAccess(membership.app_id, membership.app_name); }}
+                    label="Remove access"
+                    variant="danger"
+                    size="small"
                     disabled={pendingAction !== null}
-                    className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
-                  >
-                    Remove access
-                  </button>
+                  />
                 </div>
               )}
             </li>
@@ -399,39 +395,39 @@ function ApiKeysSection({ apiKeys, actionsRestricted, pendingAction, onSetAPIKey
       description="Keys are shown as metadata only. The secret value is never returned or displayed here."
     >
       {apiKeys.length === 0 ? (
-        <p className="text-sm text-gray-600 dark:text-slate-400">This user has no API keys.</p>
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">This user has no API keys.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
-            <thead className="bg-gray-50 dark:bg-slate-700">
+            <thead className="bg-canvas-alt dark:bg-canvas-alt-dark">
               <tr>
                 {['Name', 'Key ID', 'App', 'Status', 'Created', 'Last used', 'Actions'].map((heading) => (
-                  <th key={heading} scope="col" className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">{heading}</th>
+                  <th key={heading} scope="col" className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-fg-tertiary dark:text-fg-tertiary-dark">{heading}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
+            <tbody className="divide-y divide-line dark:divide-line-dark">
               {apiKeys.map((key) => (
                 <tr key={key.key_id}>
-                  <td className="px-3 py-3 text-sm text-gray-900 dark:text-slate-100">{key.name}</td>
-                  <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{key.key_id}</td>
-                  <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{unavailable(key.app_name)} (ID {key.app_id})</td>
-                  <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{key.is_active ? 'Active' : 'Inactive'}</td>
-                  <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{formatDate(key.created_at)}</td>
-                  <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{key.last_used_at ? formatDate(key.last_used_at) : 'Never used'}</td>
+                  <td className="px-3 py-3 text-sm font-medium text-fg dark:text-fg-dark">{key.name}</td>
+                  <td className="px-3 py-3 text-sm text-fg-secondary dark:text-fg-secondary-dark">{key.key_id}</td>
+                  <td className="px-3 py-3 text-sm text-fg-secondary dark:text-fg-secondary-dark">{unavailable(key.app_name)} (ID {key.app_id})</td>
+                  <td className="px-3 py-3 text-sm"><Badge label={key.is_active ? 'Active' : 'Inactive'} variant={key.is_active ? 'success' : 'default'} /></td>
+                  <td className="px-3 py-3 text-sm text-fg-secondary dark:text-fg-secondary-dark">{formatDate(key.created_at)}</td>
+                  <td className="px-3 py-3 text-sm text-fg-secondary dark:text-fg-secondary-dark">{key.last_used_at ? formatDate(key.last_used_at) : 'Never used'}</td>
                   <td className="px-3 py-3 text-sm">
                     {actionsRestricted ? (
-                      <span className="text-gray-500 dark:text-slate-400">Unavailable</span>
+                      <span className="text-fg-tertiary dark:text-fg-tertiary-dark">Unavailable</span>
                     ) : (
-                      <button
+                      <ButtonApp
                         type="button"
                         onClick={() => { void onSetAPIKeyStatus(key.key_id, key.name, !key.is_active); }}
                         disabled={pendingAction !== null}
-                        aria-label={`${key.is_active ? 'Deactivate' : 'Reactivate'} API key ${key.name}`}
-                        className="rounded-md border border-gray-300 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
-                      >
-                        {key.is_active ? 'Deactivate' : 'Reactivate'}
-                      </button>
+                        ariaLabel={`${key.is_active ? 'Deactivate' : 'Reactivate'} API key ${key.name}`}
+                        label={key.is_active ? 'Deactivate' : 'Reactivate'}
+                        variant={key.is_active ? 'danger' : 'secondary'}
+                        size="small"
+                      />
                     )}
                   </td>
                 </tr>
@@ -466,28 +462,31 @@ function PlatformRoleControl({
   onSetPlatformRole,
 }: Pick<EditAccountSectionProps, 'identity' | 'pendingAction' | 'onSetPlatformRole'>) {
   return (
-    <section className="rounded-xl bg-gray-50 p-4 dark:bg-slate-900/50" aria-labelledby="platform-role-actions">
-      <h3 id="platform-role-actions" className="font-semibold text-gray-900 dark:text-slate-100">Platform role</h3>
-      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
-        Current role: <span className="font-semibold capitalize text-gray-900 dark:text-slate-100">{unavailable(identity.platform_role)}</span>
-      </p>
-      <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-slate-400">
-        Viewer: read-only access. Editor: can create and edit resources. Admin: can manage platform users and settings. These settings do not change app membership roles.
-      </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {(['viewer', 'editor', 'admin'] as const).map((role) => (
-          <button
-            key={role}
-            type="button"
-            onClick={() => { void onSetPlatformRole(role); }}
-            disabled={pendingAction !== null || identity.platform_role === role}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium capitalize text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
-          >
-            <Shield className="h-4 w-4" aria-hidden="true" />
-            {pendingAction === 'Updating role' ? 'Updating…' : `Set ${role}`}
-          </button>
-        ))}
-      </div>
+    <section aria-labelledby="platform-role-actions">
+      <CardApp variant="canvas" className="space-y-3">
+        <h3 id="platform-role-actions" className="font-display text-base font-medium text-fg dark:text-fg-dark">Platform role</h3>
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+          Current role: <span className="font-medium capitalize text-fg dark:text-fg-dark">{unavailable(identity.platform_role)}</span>
+        </p>
+        <p className="text-sm leading-5 text-fg-secondary dark:text-fg-secondary-dark">
+          Viewer: read-only access. Editor: can create and edit resources. Admin: can manage platform users and settings. These settings do not change app membership roles.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {(['viewer', 'editor', 'admin'] as const).map((role) => (
+            <ButtonApp
+              key={role}
+              type="button"
+              onClick={() => { void onSetPlatformRole(role); }}
+              disabled={pendingAction !== null || identity.platform_role === role}
+              label={pendingAction === 'Updating role' ? 'Updating…' : `Set ${role}`}
+              variant="secondary"
+              size="small"
+              icon={<Shield className="h-4 w-4" aria-hidden="true" />}
+              className="capitalize"
+            />
+          ))}
+        </div>
+      </CardApp>
     </section>
   );
 }
@@ -499,34 +498,36 @@ function SignInAccessControl({
   onActivate,
 }: Pick<EditAccountSectionProps, 'identity' | 'pendingAction' | 'onDeactivate' | 'onActivate'>) {
   return (
-    <section className="rounded-xl bg-gray-50 p-4 dark:bg-slate-900/50" aria-labelledby="account-status-actions">
-      <h3 id="account-status-actions" className="font-semibold text-gray-900 dark:text-slate-100">Sign-in access</h3>
-      <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-slate-400">
-        Deactivating blocks the account from signing in. Reactivate it to restore sign-in access.
-      </p>
-      <div className="mt-3 flex flex-wrap gap-2">
+    <section aria-labelledby="account-status-actions">
+      <CardApp variant="canvas" className="space-y-3">
+        <h3 id="account-status-actions" className="font-display text-base font-medium text-fg dark:text-fg-dark">Sign-in access</h3>
+        <p className="text-sm leading-5 text-fg-secondary dark:text-fg-secondary-dark">
+          Deactivating blocks the account from signing in. Reactivate it to restore sign-in access.
+        </p>
+        <div className="flex flex-wrap gap-2">
         {identity.is_active ? (
-          <button
+          <ButtonApp
             type="button"
             onClick={() => { void onDeactivate(); }}
             disabled={pendingAction !== null}
-            className="inline-flex items-center gap-2 rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/30"
-          >
-            <Ban className="h-4 w-4" aria-hidden="true" />
-            {pendingAction === 'Deactivating user' ? 'Deactivating…' : 'Deactivate'}
-          </button>
+            label={pendingAction === 'Deactivating user' ? 'Deactivating…' : 'Deactivate'}
+            variant="danger"
+            size="small"
+            icon={<Ban className="h-4 w-4" aria-hidden="true" />}
+          />
         ) : (
-          <button
+          <ButtonApp
             type="button"
             onClick={() => { void onActivate(); }}
             disabled={pendingAction !== null}
-            className="inline-flex items-center gap-2 rounded-lg border border-green-300 px-3 py-2 text-sm font-medium text-green-800 hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-700 dark:text-green-200 dark:hover:bg-green-900/30"
-          >
-            <UserCheck className="h-4 w-4" aria-hidden="true" />
-            {pendingAction === 'Activating user' ? 'Activating…' : 'Activate'}
-          </button>
+            label={pendingAction === 'Activating user' ? 'Activating…' : 'Activate'}
+            variant="primary"
+            size="small"
+            icon={<UserCheck className="h-4 w-4" aria-hidden="true" />}
+          />
         )}
-      </div>
+        </div>
+      </CardApp>
     </section>
   );
 }
@@ -536,20 +537,22 @@ function PasswordAssistanceControl({
   onResetLink,
 }: Pick<EditAccountSectionProps, 'pendingAction' | 'onResetLink'>) {
   return (
-    <section className="rounded-xl bg-gray-50 p-4 dark:bg-slate-900/50" aria-labelledby="password-reset-actions">
-      <h3 id="password-reset-actions" className="font-semibold text-gray-900 dark:text-slate-100">Password assistance</h3>
-      <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-slate-400">
-        Generate a one-time link for this local account to set a new password. The link is shown once.
-      </p>
-      <button
-        type="button"
-        onClick={() => { void onResetLink(); }}
-        disabled={pendingAction !== null}
-        className="mt-3 inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
-      >
-        <Link2 className="h-4 w-4" aria-hidden="true" />
-        {pendingAction === 'reset-link' ? 'Generating link…' : 'Generate reset link'}
-      </button>
+    <section aria-labelledby="password-reset-actions">
+      <CardApp variant="canvas" className="space-y-3">
+        <h3 id="password-reset-actions" className="font-display text-base font-medium text-fg dark:text-fg-dark">Password assistance</h3>
+        <p className="text-sm leading-5 text-fg-secondary dark:text-fg-secondary-dark">
+          Generate a one-time link for this local account to set a new password. The link is shown once.
+        </p>
+        <ButtonApp
+          type="button"
+          onClick={() => { void onResetLink(); }}
+          disabled={pendingAction !== null}
+          label={pendingAction === 'reset-link' ? 'Generating link…' : 'Generate reset link'}
+          variant="secondary"
+          size="small"
+          icon={<Link2 className="h-4 w-4" aria-hidden="true" />}
+        />
+      </CardApp>
     </section>
   );
 }
@@ -559,20 +562,22 @@ function MarketplaceQuotaControl({
   onResetQuota,
 }: Pick<EditAccountSectionProps, 'pendingAction' | 'onResetQuota'>) {
   return (
-    <section className="rounded-xl bg-gray-50 p-4 dark:bg-slate-900/50" aria-labelledby="marketplace-quota-actions">
-      <h3 id="marketplace-quota-actions" className="font-semibold text-gray-900 dark:text-slate-100">Marketplace quota</h3>
-      <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-slate-400">
-        Reset only the user's marketplace invocation quota. This does not change the system LLM-call count shown above.
-      </p>
-      <button
-        type="button"
-        onClick={() => { void onResetQuota(); }}
-        disabled={pendingAction !== null}
-        className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
-      >
-        <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-        {pendingAction === 'Resetting marketplace quota' ? 'Resetting quota…' : 'Reset marketplace quota'}
-      </button>
+    <section aria-labelledby="marketplace-quota-actions">
+      <CardApp variant="canvas" className="space-y-3">
+        <h3 id="marketplace-quota-actions" className="font-display text-base font-medium text-fg dark:text-fg-dark">Marketplace quota</h3>
+        <p className="text-sm leading-5 text-fg-secondary dark:text-fg-secondary-dark">
+          Reset only the user's marketplace invocation quota. This does not change the system LLM-call count shown above.
+        </p>
+        <ButtonApp
+          type="button"
+          onClick={() => { void onResetQuota(); }}
+          disabled={pendingAction !== null}
+          label={pendingAction === 'Resetting marketplace quota' ? 'Resetting quota…' : 'Reset marketplace quota'}
+          variant="secondary"
+          size="small"
+          icon={<RefreshCcw className="h-4 w-4" aria-hidden="true" />}
+        />
+      </CardApp>
     </section>
   );
 }
@@ -583,21 +588,23 @@ function DeleteAccountControl({
   onDelete,
 }: Pick<EditAccountSectionProps, 'ownedAppCount' | 'pendingAction' | 'onDelete'>) {
   return (
-    <section className="rounded-xl border border-red-200 bg-red-50/70 p-4 dark:border-red-900 dark:bg-red-950/20" aria-labelledby="delete-user-action">
-      <h3 id="delete-user-action" className="font-semibold text-red-900 dark:text-red-200">Delete account</h3>
-      <p className="mt-1 text-sm leading-5 text-red-800 dark:text-red-300">
-        Permanently remove this account. If the user owns apps, you will be asked to transfer them or confirm deleting them too.
-      </p>
-      <button
-        type="button"
-        onClick={() => { void onDelete(); }}
-        disabled={pendingAction !== null}
-        className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:text-red-200 dark:hover:bg-red-900/30"
-      >
-        <Trash2 className="h-4 w-4" aria-hidden="true" />
-        {pendingAction === 'delete' ? 'Deleting…' : 'Delete user'}
-      </button>
-      {ownedAppCount > 0 && <p className="mt-2 text-sm font-medium text-red-800 dark:text-red-300">This user currently owns {ownedAppCount} app{ownedAppCount === 1 ? '' : 's'}.</p>}
+    <section aria-labelledby="delete-user-action">
+      <CardApp variant="white" className="space-y-3 border-error dark:border-error-dark">
+        <h3 id="delete-user-action" className="font-display text-base font-medium text-error dark:text-error-dark">Delete account</h3>
+        <p className="text-sm leading-5 text-fg-secondary dark:text-fg-secondary-dark">
+          Permanently remove this account. If the user owns apps, you will be asked to transfer them or confirm deleting them too.
+        </p>
+        <ButtonApp
+          type="button"
+          onClick={() => { void onDelete(); }}
+          disabled={pendingAction !== null}
+          label={pendingAction === 'delete' ? 'Deleting…' : 'Delete user'}
+          variant="dangerSolid"
+          size="small"
+          icon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
+        />
+        {ownedAppCount > 0 && <p className="text-sm font-medium text-error dark:text-error-dark">This user currently owns {ownedAppCount} app{ownedAppCount === 1 ? '' : 's'}.</p>}
+      </CardApp>
     </section>
   );
 }
@@ -623,7 +630,7 @@ function EditAccountSection({
       description="Administrative actions are performed here so the account and its relationships can be reviewed before making changes."
     >
       {actionsRestricted ? (
-        <output className="block text-sm text-gray-700 dark:text-slate-300">
+        <output className="block text-sm text-fg-secondary dark:text-fg-secondary-dark">
           {isSelf ? 'Actions are unavailable for your own account.' : 'This protected omniadmin account cannot be changed here.'}
         </output>
       ) : (
@@ -635,7 +642,7 @@ function EditAccountSection({
           )}
           {canResetQuota && <MarketplaceQuotaControl pendingAction={pendingAction} onResetQuota={onResetQuota} />}
           <DeleteAccountControl ownedAppCount={ownedAppCount} pendingAction={pendingAction} onDelete={onDelete} />
-          {pendingAction && <p className="text-sm text-gray-600 dark:text-slate-400">{pendingAction}…</p>}
+          {pendingAction && <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{pendingAction}…</p>}
         </div>
       )}
     </SectionCard>
@@ -644,34 +651,31 @@ function EditAccountSection({
 
 function UserHeader({ identity, displayName }: { readonly identity: DetailIdentity; readonly displayName: string }) {
   return (
-    <header className="overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-6 shadow-sm dark:border-slate-700 dark:from-slate-800 dark:via-slate-800 dark:to-indigo-950">
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-xl font-bold text-white shadow-sm dark:bg-blue-500" aria-hidden="true">
-            {(identity.name?.trim().charAt(0) || identity.email?.trim().charAt(0) || '?').toUpperCase()}
+    <header>
+      <CardApp variant="canvas" className="overflow-hidden p-6">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-ink font-display text-xl font-medium text-ink-on dark:bg-ink-dark dark:text-ink-on-dark" aria-hidden="true">
+              {(identity.name?.trim().charAt(0) || identity.email?.trim().charAt(0) || '?').toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-fg-tertiary dark:text-fg-tertiary-dark">Platform user</p>
+              <Title
+                titulo={displayName}
+                subtitulo={unavailable(identity.email)}
+                variant="titSecundario"
+                titleMarginBottom={2}
+                subtitleMarginBottom={0}
+              />
+              <p className="mt-2 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">User ID {identity.user_id}</p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Platform user</p>
-            <h1 className="mt-1 break-words text-2xl font-bold text-gray-950 dark:text-white">{displayName}</h1>
-            <p className="mt-1 break-all text-sm text-gray-600 dark:text-slate-300">{unavailable(identity.email)}</p>
-            <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">User ID {identity.user_id}</p>
+          <div className="flex flex-wrap gap-2 sm:justify-end">
+            <Badge label={identity.is_active ? 'Account active' : 'Account inactive'} variant={identity.is_active ? 'success' : 'default'} />
+            {identity.is_omniadmin && <Badge label="Omniadmin" variant="secondary" />}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 sm:justify-end">
-          <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-semibold ${
-            identity.is_active
-              ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/30 dark:text-green-200'
-              : 'border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-200'
-          }`}>
-            {identity.is_active ? 'Account active' : 'Account inactive'}
-          </span>
-          {identity.is_omniadmin && (
-            <span className="inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-3 py-1.5 text-sm font-semibold text-purple-800 dark:border-purple-800 dark:bg-purple-900/30 dark:text-purple-200">
-              Omniadmin
-            </span>
-          )}
-        </div>
-      </div>
+      </CardApp>
     </header>
   );
 }
@@ -685,11 +689,11 @@ function UserSummaryCards({ detail }: { readonly detail: UserDetail }) {
         { label: 'API keys', value: detail.api_keys.length, detail: 'Keys owned by this user' },
         { label: 'System LLM calls', value: detail.usage?.call_count ?? 0, detail: `Since ${formatDate(detail.usage?.billing_period_start)}` },
       ].map((item) => (
-        <div key={item.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          <p className="text-sm font-medium text-gray-600 dark:text-slate-400">{item.label}</p>
-          <p className="mt-2 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">{item.value}</p>
-          <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{item.detail}</p>
-        </div>
+        <CardApp key={item.label} className="p-4">
+          <p className="text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark">{item.label}</p>
+          <p className="mt-2 font-display text-3xl font-normal tracking-tight text-ink dark:text-ink-dark">{item.value}</p>
+          <p className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{item.detail}</p>
+        </CardApp>
       ))}
     </div>
   );
