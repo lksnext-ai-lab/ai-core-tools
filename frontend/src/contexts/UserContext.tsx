@@ -4,6 +4,8 @@ import { authService, type CurrentUserPayload } from '../services/auth';
 import { OIDCContext } from '../auth/OIDCProvider';
 import { resolveCurrentUser } from '../auth/resolveCurrentUser';
 import { clearPlatformChatbotStorage } from '../utils/platformChatbotStorage';
+import { apiService } from '../services/api';
+import { useAuthenticatedImage } from '../hooks/useAuthenticatedImage';
 
 export interface User {
   user_id: number;
@@ -15,6 +17,8 @@ export interface User {
   platform_role?: 'viewer' | 'editor' | 'admin';
   /** True for editors and admins; false for viewers */
   is_editor?: boolean;
+  /** Version of the profile picture; null/absent = no picture (initials are shown). */
+  avatar_updated_at?: string | null;
 }
 
 /** `unavailable`: the backend could not be reached, so the session state is unknown. */
@@ -25,6 +29,8 @@ interface UserContextType {
   /** True until the backend has confirmed (or rejected) the session. */
   loading: boolean;
   sessionError: SessionError | null;
+  /** Object URL of the current user's profile picture; null while absent or loading. */
+  avatarUrl: string | null;
   setUser: (user: User | null) => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -40,6 +46,9 @@ export const useUser = () => {
   return context;
 };
 
+/** Like `useUser` but returns `undefined` outside a provider; for presentational use (e.g. an avatar) that can degrade. */
+export const useOptionalUser = () => useContext(UserContext);
+
 interface UserProviderProps {
   children: ReactNode;
 }
@@ -54,6 +63,7 @@ function toUser(payload: CurrentUserPayload): User {
     is_omniadmin: payload.is_omniadmin ?? false,
     platform_role: payload.platform_role,
     is_editor: (payload.is_admin ?? false) || payload.platform_role !== 'viewer',
+    avatar_updated_at: payload.avatar_updated_at ?? null,
   };
 }
 
@@ -141,6 +151,12 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
 
   const refreshUser = useCallback(() => resolveUser(), [resolveUser]);
 
+  const avatarUrl = useAuthenticatedImage(
+    user?.user_id ?? null,
+    user?.avatar_updated_at,
+    (version) => apiService.getMyAvatar(version),
+  );
+
   const logout = useCallback(async () => {
     requestIdRef.current++;
     // Local per-user data must not outlive the session on a shared browser.
@@ -160,11 +176,12 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       user,
       loading,
       sessionError,
+      avatarUrl,
       setUser,
       logout,
       refreshUser,
     }),
-    [user, loading, sessionError, logout, refreshUser],
+    [user, loading, sessionError, avatarUrl, logout, refreshUser],
   );
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;

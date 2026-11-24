@@ -1,5 +1,7 @@
 from typing import Optional, List
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
+from models.repository import PLAYGROUND_MEDIA_REPO_TYPE, Repository
 from models.silo import Silo
 from models.output_parser import OutputParser
 from models.embedding_service import EmbeddingService
@@ -21,11 +23,38 @@ class SiloRepository:
         return db.query(Silo).filter(Silo.silo_id == silo_id).first()
     
     @staticmethod
+    def visible_clause():
+        """SQL clause: the silo is NOT the hidden temp silo of a playground / Chat conversation.
+
+        Temp silos (the silo of a ``Repository`` of type ``playground_media``) belong to ONE conversation of ONE user
+        and are reachable only through ``PlaygroundMediaService``. Every App-scoped listing / lookup that a user, an
+        API key or an agent form can reach must add this clause; internal paths (media service, cleanup, App delete
+        cascade, lifecycle counts) deliberately do not.
+        """
+        return ~exists().where(
+            Repository.silo_id == Silo.silo_id, Repository.type == PLAYGROUND_MEDIA_REPO_TYPE
+        )
+
+    @staticmethod
+    def is_temp_silo(silo_id: int, db: Session) -> bool:
+        """Whether ``silo_id`` is the hidden temp silo of a playground / Chat conversation."""
+        return db.execute(
+            select(
+                exists().where(Repository.silo_id == silo_id, Repository.type == PLAYGROUND_MEDIA_REPO_TYPE)
+            )
+        ).scalar_one()
+
+    @staticmethod
+    def get_visible_by_id(silo_id: int, db: Session) -> Optional[Silo]:
+        """A silo by id unless it is a hidden conversation temp silo (one query)."""
+        return db.query(Silo).filter(Silo.silo_id == silo_id, SiloRepository.visible_clause()).first()
+
+    @staticmethod
     def get_by_app_id(app_id: int, db: Session) -> List[Silo]:
         """
-        Retrieve all silos by app_id
+        Retrieve the user-visible silos of an app (hidden temp silos of conversations are excluded).
         """
-        return db.query(Silo).filter(Silo.app_id == app_id).all()
+        return db.query(Silo).filter(Silo.app_id == app_id, SiloRepository.visible_clause()).all()
     
     @staticmethod
     def create(silo: Silo, db: Session) -> Silo:

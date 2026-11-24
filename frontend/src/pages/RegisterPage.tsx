@@ -1,8 +1,14 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+﻿import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../services/api';
+import CardApp from '../components/ui/CardApp';
+import Alert from '../components/ui/Alert';
+import ButtonApp from '../components/ui/ButtonApp';
+import ButtonLink from '../components/ui/ButtonLink';
+import { FormField } from '../components/ui/FormField';
 
-const RegisterPage: React.FC = () => {
+const RegisterPage = () => {
+  const { t } = useTranslation('common');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -16,69 +22,74 @@ const RegisterPage: React.FC = () => {
     try {
       await apiService.register(email, password);
       setSuccess(true);
-    } catch (err: any) {
-      setError(err.message ?? 'Registration failed');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('registerPage.registrationFailed'));
     } finally {
       setIsLoading(false);
     }
   };
 
+  const pageBackground = 'flex min-h-screen items-center justify-center px-4 text-fg bg-gradient-to-b from-canvas-alt to-surface dark:text-fg-dark dark:from-canvas-alt-dark dark:to-surface-dark';
+
   if (success) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="max-w-md w-full bg-white rounded-lg shadow p-8 text-center">
-          <h2 className="text-xl font-semibold mb-2">Check your email</h2>
-          <p className="text-gray-600">
-            We sent a verification link to <strong>{email}</strong>. Click it to activate your account.
-          </p>
+      <div className={pageBackground}>
+        <div className="w-full max-w-md">
+          <Alert
+            type="success"
+            title={t('registerPage.successTitle')}
+            message={t('registerPage.successMessage', { email })}
+          />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <div className="max-w-md w-full bg-white rounded-lg shadow p-8">
-        <h1 className="text-2xl font-bold mb-6">Create an account</h1>
-        {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded">{error}</div>}
+    <div className={pageBackground}>
+      <CardApp className="p-8" titulo={t('registerPage.title')}>
+        {error && <Alert type="error" message={error} className="mb-4" />}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              minLength={8}
-              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <button
+          <FormField
+            id="register-email"
+            label={t('login.emailLabel')}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
+          <FormField
+            id="register-password"
+            label={t('login.passwordLabel')}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+            autoComplete="new-password"
+          />
+          <ButtonApp
+            label={isLoading ? t('registerPage.creatingAccount') : t('registerPage.submit')}
             type="submit"
             disabled={isLoading}
-            className="w-full bg-blue-600 text-white rounded px-4 py-2 font-medium hover:bg-blue-700 disabled:opacity-50"
-          >
-            {isLoading ? 'Creating account...' : 'Create account'}
-          </button>
+            loading={isLoading}
+            variant="primary"
+            size="medium"
+            className="w-full"
+          />
         </form>
-        <p className="mt-4 text-sm text-gray-600">
-          Already have an account?{' '}
-          <Link to="/login" className="text-blue-600 hover:underline">Sign in</Link>
+        <ButtonLink
+          label={t('registerPage.signIn')}
+          to="/login"
+          variant="secondary"
+          size="medium"
+          className="mt-4 w-full"
+        />
+        <p className="mt-6 border-t border-line pt-4 text-center text-sm text-fg-tertiary dark:border-line-dark dark:text-fg-tertiary-dark">
+          {t('registerPage.socialLoginComingSoon')}
         </p>
-        <div className="mt-6 border-t pt-4 text-center text-sm text-gray-400">
-          Social login (Google, GitHub) — coming soon
-        </div>
-      </div>
+      </CardApp>
     </div>
   );
 };

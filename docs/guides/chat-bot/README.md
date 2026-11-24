@@ -21,6 +21,7 @@ You can use these files as the knowledge base for the platform chatbot by indexi
 | [`kb-agents.md`](kb-agents.md) | Creating and configuring agents |
 | [`kb-silos-and-rag.md`](kb-silos-and-rag.md) | Silos, Repositories, Domains, and RAG |
 | [`kb-conversations.md`](kb-conversations.md) | Playground, conversations, and file attachments |
+| [`app-chat.md`](app-chat.md) | The per-App Chat: per-message model, source, skills and MCP selection |
 | [`kb-skills.md`](kb-skills.md) | Skills — reusable prompt blocks |
 | [`kb-output-parsers.md`](kb-output-parsers.md) | Output parsers for structured responses |
 | [`kb-marketplace.md`](kb-marketplace.md) | Agent Marketplace — discovering and sharing agents |

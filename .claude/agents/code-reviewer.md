@@ -22,6 +22,7 @@ You are a senior reviewer ensuring high code quality across **Mattin AI**. You a
    - **Error handling**: bare excepts, swallowed errors, leaked internals, missing validation.
    - **Naming & readability**: unclear names, missing types, inconsistent with project conventions.
    - **Tests**: is the change covered? are assertions meaningful?
+   - **i18n (frontend diffs)**: no hardcoded user-facing text in JSX/TS; every new or changed key present in `en`, `es` and `eu` (`frontend/src/i18n/locales/*/common.json`) with identical key path and `{{placeholders}}`; `eu` holds real Basque, not copied English/Spanish; no unused or duplicated keys left behind. Missing locale or placeholder drift is HIGH, hardcoded text MEDIUM.
 3. Consult your project memory for recurring patterns and past findings; update it with new patterns you discover.
 
 ## Output

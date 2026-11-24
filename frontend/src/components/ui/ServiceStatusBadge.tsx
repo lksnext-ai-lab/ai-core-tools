@@ -1,4 +1,5 @@
 import { AlertTriangle, XCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { LifecycleStatus } from '../../types/services';
 import { SERVICE_LIFECYCLE_STRINGS, formatEndOfServiceDate } from '../../utils/serviceLifecycle';
 
@@ -25,9 +26,13 @@ function ServiceStatusBadge({
   endOfServiceAt,
   deprecationNotice,
 }: Readonly<ServiceStatusBadgeProps>) {
+  const { t, i18n } = useTranslation('common');
   const date = endOfServiceAt ? formatEndOfServiceDate(endOfServiceAt) : '';
+  const formattedLastErrorAt = lastErrorAt
+    ? new Date(lastErrorAt).toLocaleString(i18n.resolvedLanguage ?? i18n.language)
+    : '';
   const notice = deprecationNotice ? (
-    <p className="mt-1 text-xs text-gray-600 dark:text-gray-300 whitespace-normal">{deprecationNotice}</p>
+    <p className="mt-1 text-xs text-fg-secondary dark:text-fg-secondary-dark whitespace-normal">{deprecationNotice}</p>
   ) : null;
 
   if (lifecycleStatus === 'retired') {
@@ -51,7 +56,7 @@ function ServiceStatusBadge({
   if (needsApiKey) {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200">
-        <AlertTriangle className="w-3 h-3" aria-hidden="true" /> API Key Required
+        <AlertTriangle className="w-3 h-3" aria-hidden="true" /> {t('serviceStatusBadge.apiKeyRequired')}
       </span>
     );
   }
@@ -59,12 +64,12 @@ function ServiceStatusBadge({
     return (
       <div className="max-w-xs">
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200">
-          <XCircle className="w-3 h-3" aria-hidden="true" /> Failing<span className="sr-only">:</span>
+        <XCircle className="w-3 h-3" aria-hidden="true" /> {t('serviceStatusBadge.failing')}<span className="sr-only">:</span>
         </span>
-        <p className="mt-1 text-xs text-red-700 dark:text-red-300 whitespace-normal">
+        <p className="mt-1 text-xs text-error dark:text-error-dark whitespace-normal">
           {lastError}
           {lastErrorAt && (
-            <> Since <time dateTime={lastErrorAt}>{new Date(lastErrorAt).toLocaleString()}</time>.</>
+          <> {t('serviceStatusBadge.since')} <time dateTime={lastErrorAt}>{formattedLastErrorAt}</time>.</>
           )}
         </p>
       </div>
@@ -87,7 +92,7 @@ function ServiceStatusBadge({
   }
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200">
-      Ready
+      {t('serviceStatusBadge.ready')}
     </span>
   );
 }

@@ -73,6 +73,7 @@ from typing import TYPE_CHECKING, Any
 
 import config as settings
 from utils.logger import get_logger
+from .chat_guard import describe_exc, logs_are_redacted
 from .provider import (
     SandboxProvider,
     SandboxHandle,
@@ -415,7 +416,7 @@ class OpenSandboxProvider(SandboxProvider):
                 logger.warning(
                     "OpenSandboxProvider: failed to create context for language '%s': %s",
                     lang,
-                    exc,
+                    describe_exc(exc),
                 )
 
         if not contexts:
@@ -612,7 +613,7 @@ class OpenSandboxProvider(SandboxProvider):
                     "for language '%s' (sandbox=%s): %s",
                     language,
                     handle.sandbox_id,
-                    exc,
+                    describe_exc(exc),
                 )
                 return
             if replacement is not None:
@@ -689,7 +690,7 @@ class OpenSandboxProvider(SandboxProvider):
                     "OpenSandboxProvider: sandbox %s unavailable during resume; "
                     "creating fresh: %s",
                     existing_sandbox_id,
-                    exc,
+                    describe_exc(exc),
                 )
                 sandbox = None
 
@@ -795,7 +796,7 @@ class OpenSandboxProvider(SandboxProvider):
             logger.warning(
                 "OpenSandboxProvider: error killing sandbox %s: %s",
                 handle.sandbox_id,
-                exc,
+                describe_exc(exc),
             )
         finally:
             try:
@@ -804,7 +805,7 @@ class OpenSandboxProvider(SandboxProvider):
                 logger.debug(
                     "OpenSandboxProvider: error closing sandbox %s transport: %s",
                     handle.sandbox_id,
-                    exc,
+                    describe_exc(exc),
                 )
 
     def destroy_sandbox_id(self, sandbox_id: str) -> None:
@@ -1030,8 +1031,8 @@ class OpenSandboxProvider(SandboxProvider):
             logger.error(
                 "OpenSandboxProvider.run_code error (sandbox_id=%s): %s",
                 handle.sandbox_id,
-                exc,
-                exc_info=True,
+                describe_exc(exc),
+                exc_info=not logs_are_redacted(),  # Chat turns: no traceback message / provider text
             )
             return f"[Error] Code execution failed: {exc}"[:effective_limit]
         finally:
@@ -1152,6 +1153,30 @@ class OpenSandboxProvider(SandboxProvider):
         )
         return data
 
+    def read_file_limited(self, handle: SandboxHandle, filename: str, max_bytes: int) -> bytes:
+        """Range-read + stream at most ``max_bytes + 1`` bytes (stops even if the server ignores the range)."""
+        sandbox = handle.metadata.get(_META_SANDBOX)
+        if sandbox is None:
+            raise SandboxExpiredError(
+                f"OpenSandboxProvider: no sandbox object for handle {handle.sandbox_id}"
+            )
+        remote_path = _workspace_path(filename)
+        try:
+            self._reset_idle_timeout(sandbox)
+            try:
+                stream = sandbox.files.read_bytes_stream(
+                    remote_path, range_header=f"bytes=0-{max_bytes}"
+                )
+                return self._collect_bounded(stream, max_bytes)
+            finally:
+                self._reset_idle_timeout(sandbox, suppress_errors=True)
+        except Exception as exc:
+            if self._sdk_expiry_exceptions and isinstance(exc, self._sdk_expiry_exceptions):
+                raise SandboxExpiredError(
+                    f"Sandbox {handle.sandbox_id} expired during read_file_limited: {exc}"
+                ) from exc
+            raise
+
     def list_files(self, handle: SandboxHandle) -> list[str]:
         """Return workspace-relative paths of all files under ``/workspace``.
 
@@ -1185,7 +1210,7 @@ class OpenSandboxProvider(SandboxProvider):
             logger.warning(
                 "OpenSandboxProvider.list_files: search failed (sandbox=%s): %s",
                 handle.sandbox_id,
-                exc,
+                describe_exc(exc),
             )
             return []
 

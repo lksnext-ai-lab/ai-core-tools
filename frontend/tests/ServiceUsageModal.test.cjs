@@ -126,6 +126,10 @@ function mount(apiService) {
     'react-router-dom': { Link: 'a' },
     '../ui/Modal': { default: 'Modal' },
     '../ui/ServiceStatusBadge': { default: 'ServiceStatusBadge' },
+    '../ui/ButtonApp': { ButtonApp: 'ButtonApp' },
+    '../ui/FormField': { FormSelect: 'FormSelect' },
+    '../ui/Alert': { __esModule: true, default: 'Alert' },
+    '../ui/CardApp': { __esModule: true, default: 'CardApp' },
     '../../services/api': {
       apiService,
       ApiError: class ApiError extends Error {},
@@ -171,14 +175,14 @@ function mount(apiService) {
 function elements(node) {
   if (Array.isArray(node)) return node.flatMap(elements);
   if (!node || typeof node !== 'object') return [];
-  return [node, ...elements(node.props?.children)];
+  return [node, ...elements(node.props?.children), ...elements(node.props?.message)];
 }
 
 function textContent(node) {
   if (typeof node === 'string' || typeof node === 'number') return String(node);
   if (Array.isArray(node)) return node.map(textContent).join(' ');
   if (!node || typeof node !== 'object') return '';
-  return textContent(node.props?.children);
+  return [textContent(node.props?.children), textContent(node.props?.message)].join(' ');
 }
 
 test('shows target-load errors and retries loading target services', async () => {
@@ -196,7 +200,8 @@ test('shows target-load errors and retries loading target services', async () =>
   const failedView = page.render();
 
   assert.ok(
-    elements(failedView).some((node) => node.props.role === 'alert'),
+    // Alert renders role="alert" for type="error" (see components/ui/Alert.tsx).
+    elements(failedView).some((node) => node.type === 'Alert' && node.props.type === 'error'),
     'Expected an alert for the target-service loading error',
   );
   assert.match(textContent(failedView), /Could not load available services/);
@@ -213,5 +218,7 @@ test('shows target-load errors and retries loading target services', async () =>
   const recoveredView = page.render();
 
   assert.equal(targetLoads, 2);
-  assert.ok(elements(recoveredView).some((node) => node.type === 'option' && node.props.value === 20));
+  assert.ok(elements(recoveredView).some(
+    (node) => node.type === 'FormSelect' && node.props.options.some((option) => option.value === 20),
+  ));
 });

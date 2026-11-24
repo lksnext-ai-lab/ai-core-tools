@@ -125,8 +125,7 @@ docs/
 │   └── frontend.md
 ├── guides/                     # How-to guides
 │   ├── getting-started.md
-│   ├── deployment.md
-│   └── client-setup.md
+│   └── deployment.md
 ├── api/                        # API documentation
 │   ├── internal-api.md
 │   └── public-api.md
@@ -164,7 +163,6 @@ The index file should follow this format:
 
 ### Guides
 - [Deployment Guide](guides/deployment.md) — Docker and Kubernetes deployment
-- [Client Project Setup](guides/client-setup.md) — Creating and customizing client projects
 
 ### Reference
 - [Environment Variables](reference/environment-variables.md) — Configuration reference

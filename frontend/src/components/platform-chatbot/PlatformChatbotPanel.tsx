@@ -1,10 +1,14 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { X, RotateCcw, Send } from 'lucide-react';
+import { ArrowRight, Bot, MessageCircle, RotateCcw, X } from 'lucide-react';
 import { usePlatformChatbot } from '../../contexts/PlatformChatbotContext';
 import { apiService } from '../../services/api';
 import MessageContent from '../playground/MessageContent';
 import StreamingMessage from '../playground/StreamingMessage';
+import BackgroundImage from '../ui/BackgroundImage';
+import ButtonApp from '../ui/ButtonApp';
+import { FormTextArea } from '../ui/FormField';
 import type { StreamEvent } from '../../types/streaming';
+import { useTranslation } from 'react-i18next';
 
 interface PlatformChatbotPanelProps {
   agentName: string | null;
@@ -87,6 +91,19 @@ function parseAgentResponse(text: string): { content: string; follow_ups: string
   return { content: unescapeJsonString(contentMatch[1]), follow_ups };
 }
 
+function localizeAuthenticationError(
+  content: string,
+  prefix: string,
+  authenticationFailed: string,
+): string {
+  if (!/authentication failed|error de autenticación/i.test(content)) return content;
+
+  const detail = content
+    .replace(/(?:sorry,\s*something went wrong\.?|lo sentimos,\s*se ha producido un error\.?)\s*/i, '')
+    .replace(/authentication failed|error de autenticación/gi, authenticationFailed);
+  return `${prefix} ${detail}`.trim();
+}
+
 // ---------------------------------------------------------------------------
 
 const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
@@ -94,6 +111,7 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
   onClose,
   onNewConversation,
 }) => {
+  const { t } = useTranslation('common');
   const { messages, addMessage, sessionId } = usePlatformChatbot();
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -170,11 +188,15 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
             setStreamingContent('');
             addMessage({ role: 'assistant', content, follow_ups, timestamp: Date.now() });
           } else if (event.type === 'error') {
-            const errMsg = (event.data as { message?: string }).message || 'Something went wrong.';
+            const errMsg = (event.data as { message?: string }).message || t('errors.generic');
+            const translatedErrMsg = errMsg.replace(
+              /authentication failed/gi,
+              t('errors.authenticationFailed'),
+            );
             setStreamingContent('');
             addMessage({
               role: 'assistant',
-              content: `Sorry, something went wrong. ${errMsg}`,
+              content: `${t('errors.chatbotPrefix')} ${translatedErrMsg}`,
               timestamp: Date.now(),
             });
           }
@@ -186,7 +208,7 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
       if (err instanceof Error && err.name !== 'AbortError') {
         addMessage({
           role: 'assistant',
-          content: 'Sorry, something went wrong. Please try again.',
+          content: t('errors.chatbotTryAgain'),
           timestamp: Date.now(),
         });
       }
@@ -196,7 +218,8 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (!(e.target instanceof HTMLTextAreaElement)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
@@ -213,36 +236,48 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
   };
 
   return (
-    <div className="fixed bottom-20 right-4 z-50 w-96 h-[600px] flex flex-col rounded-xl shadow-2xl border bg-white dark:bg-zinc-900 overflow-hidden transition-all duration-300">
+    <div
+      role="dialog"
+      aria-label={agentName || t('platformChatbot.defaultAgentName')}
+      className="fixed bottom-20 right-4 z-50 flex h-[600px] max-h-[calc(100vh-6rem)] w-96 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-md border border-line bg-surface shadow-[0_14px_40px_rgba(0,0,0,0.12)] dark:border-line-dark dark:bg-surface-dark"
+    >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/50">
-        <span className="font-semibold text-sm truncate">
-          {agentName || 'AI Assistant'}
-        </span>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
+      <div className="flex items-center justify-between gap-2 border-b border-line bg-surface-tint px-4 py-3 dark:border-line-dark dark:bg-surface-tint-dark">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <BackgroundImage icon={Bot} size={34} iconSize={17} />
+          <span className="truncate font-display text-sm font-medium text-fg dark:text-fg-dark">
+            {agentName || t('platformChatbot.defaultAgentName')}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <ButtonApp
+            label={t('platformChatbot.new')}
+            ariaLabel={t('platformChatbot.newConversation')}
+            variant="muted"
+            size="compact"
+            icon={<RotateCcw size={12} aria-hidden="true" />}
             onClick={handleNewConversation}
-            className="text-xs px-2 py-1 rounded border hover:bg-muted transition-colors"
-            title="New conversation"
-          >
-            <RotateCcw size={12} className="inline mr-1" />
-            New
-          </button>
+          />
           <button
+            type="button"
             onClick={onClose}
-            className="p-1 rounded hover:bg-muted transition-colors"
-            aria-label="Close"
+            aria-label={t('platformChatbot.close')}
+            title={t('platformChatbot.close')}
+            className="flex items-center rounded p-1 text-fg-tertiary transition-colors hover:text-fg focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent dark:text-fg-tertiary-dark dark:hover:text-fg-dark dark:focus-visible:outline-accent-dark"
           >
-            <X size={16} />
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
       </div>
 
       {/* Message list */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 space-y-3 overflow-y-auto p-4">
         {messages.length === 0 && !isStreaming && (
-          <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-            Hi! How can I help you today?
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+            <BackgroundImage icon={MessageCircle} size={64} iconSize={32} />
+            <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+              {t('platformChatbot.greeting')}
+            </p>
           </div>
         )}
 
@@ -252,29 +287,36 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
             className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
           >
             <div
-              className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+              className={`max-w-[85%] rounded-md border px-3 py-2 text-sm leading-relaxed text-fg dark:text-fg-dark ${
                 msg.role === 'user'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-foreground'
+                  ? 'border-bronze-border bg-bronze-bg dark:border-bronze-border-dark dark:bg-bronze-bg-dark'
+                  : 'border-line bg-surface dark:border-line-dark dark:bg-surface-dark'
               }`}
             >
               {msg.role === 'assistant' ? (
-                <MessageContent content={msg.content} />
+                <MessageContent
+                  content={localizeAuthenticationError(
+                    msg.content,
+                    t('errors.chatbotPrefix'),
+                    t('errors.authenticationFailed'),
+                  )}
+                />
               ) : (
                 <span className="whitespace-pre-wrap">{msg.content}</span>
               )}
             </div>
             {msg.role === 'assistant' && msg.follow_ups && msg.follow_ups.length > 0 && (
-              <div className="flex flex-col items-start gap-1 mt-1 max-w-[85%]">
+              <div className="mt-1 flex max-w-[85%] flex-col items-start gap-1">
                 {msg.follow_ups.map((fu, fi) => (
-                  <button
+                  <ButtonApp
                     key={fi}
-                    onClick={() => handleSend(fu)}
+                    label={fu}
+                    variant="muted"
+                    size="compact"
                     disabled={isSending}
-                    className="text-xs px-3 py-1.5 rounded-full border border-primary/40 text-primary hover:bg-primary/10 transition-colors text-left disabled:opacity-40"
-                  >
-                    {fu}
-                  </button>
+                    className="text-left"
+                    onClick={() => void handleSend(fu)}
+                  />
                 ))}
               </div>
             )}
@@ -292,24 +334,34 @@ const PlatformChatbotPanel: React.FC<PlatformChatbotPanelProps> = ({
       </div>
 
       {/* Input area */}
-      <div className="flex gap-2 p-3 border-t">
-        <textarea
+      <div
+        onKeyDown={handleKeyDown}
+        className="flex items-end gap-2 border-t border-line p-3 dark:border-line-dark"
+      >
+        <FormTextArea
+          id="platform-chatbot-input"
+          label={t('platformChatbot.inputPlaceholder')}
+          labelClassName="sr-only"
+          className="flex-1"
+          textareaClassName="block resize-none max-h-[120px]"
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type a message..."
+          placeholder={t('platformChatbot.inputPlaceholder')}
           rows={1}
           disabled={isSending}
-          className="flex-1 resize-none rounded-md border bg-white dark:bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-          style={{ minHeight: '38px', maxHeight: '120px' }}
         />
         <button
-          onClick={() => handleSend()}
+          type="button"
+          onClick={() => void handleSend()}
           disabled={isSending || !inputText.trim()}
-          className="shrink-0 p-2 rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40 transition-opacity"
-          aria-label="Send"
+          className="w-[38px] h-[38px] flex items-center justify-center rounded-lg shrink-0
+                     bg-ink dark:bg-ink-dark text-ink-on dark:text-ink-on-dark
+                     hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed
+                     transition-opacity duration-150"
+          aria-label={t('agentPlayground.chat.sendMessage')}
+          title={t('agentPlayground.chat.sendMessage')}
         >
-          <Send size={16} />
+          <ArrowRight className="w-4 h-4" aria-hidden="true" />
         </button>
       </div>
     </div>

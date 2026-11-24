@@ -12,6 +12,7 @@ const compiled = ts.transpileModule(source, {
 const helpers = {};
 vm.runInNewContext(compiled, { exports: helpers, URL, atob });
 const { initialChannelForm, validateChannelIdentity, validateChannelConfiguration, buildChannelPayload } = helpers;
+const t = (key) => key;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const destination = {
   id: 7, name: 'Alerts', provider_key: 'webhook', has_credentials: true,
@@ -25,7 +26,7 @@ test('editing attachment options preserves stored endpoint, credentials and othe
   form.includeAttachments = true;
   assert.equal(form.url, '');
   assert.equal(form.credential, '');
-  assert.equal(validateChannelConfiguration(form, destination), null);
+  assert.equal(validateChannelConfiguration(form, destination, t), null);
   const payload = plain(buildChannelPayload(form, destination));
   assert.equal('webhook_url' in payload, false);
   assert.equal('credentials' in payload, false);
@@ -36,7 +37,7 @@ test('editing attachment options preserves stored endpoint, credentials and othe
 
 test('switching to unauthenticated webhook explicitly clears stored credentials', () => {
   const form = { ...initialChannelForm(destination), authMode: 'none', credential: 'ignored' };
-  assert.equal(validateChannelConfiguration(form, destination), null);
+  assert.equal(validateChannelConfiguration(form, destination, t), null);
   const payload = buildChannelPayload(form, destination);
   assert.equal(payload.clear_credentials, true);
   assert.equal(payload.public_config.auth_mode, 'none');
@@ -45,28 +46,28 @@ test('switching to unauthenticated webhook explicitly clears stored credentials'
 
 test('changing authentication requires a new credential and sends only the selected credential type', () => {
   const form = { ...initialChannelForm(destination), authMode: 'bearer' };
-  assert.ok(validateChannelConfiguration(form, destination));
+  assert.ok(validateChannelConfiguration(form, destination, t));
   form.credential = 'new-token';
-  assert.equal(validateChannelConfiguration(form, destination), null);
+  assert.equal(validateChannelConfiguration(form, destination, t), null);
   assert.deepEqual(plain(buildChannelPayload(form, destination).credentials), { bearer_token: 'new-token' });
   const anonymous = { ...destination, has_credentials: false, public_config: { auth_mode: 'none' } };
   const secureForm = { ...initialChannelForm(anonymous), authMode: 'hmac_sha256' };
-  assert.ok(validateChannelConfiguration(secureForm, anonymous));
+  assert.ok(validateChannelConfiguration(secureForm, anonymous, t));
   secureForm.credential = signingSecret;
-  assert.equal(validateChannelConfiguration(secureForm, anonymous), null);
+  assert.equal(validateChannelConfiguration(secureForm, anonymous, t), null);
 });
 
 test('creation requires an HTTPS endpoint and credentials of the correct format', () => {
   const form = { ...initialChannelForm(null), provider: 'webhook' };
-  assert.ok(validateChannelConfiguration(form, null));
+  assert.ok(validateChannelConfiguration(form, null, t));
   form.url = 'https://example.com/events';
-  assert.ok(validateChannelConfiguration(form, null));
+  assert.ok(validateChannelConfiguration(form, null, t));
   form.credential = Buffer.alloc(31).toString('base64');
-  assert.ok(validateChannelConfiguration(form, null));
+  assert.ok(validateChannelConfiguration(form, null, t));
   form.credential = signingSecret;
-  assert.equal(validateChannelConfiguration(form, null), null);
+  assert.equal(validateChannelConfiguration(form, null, t), null);
   for (const url of ['http://example.com', 'https://example.com:8443', 'https://user:pass@example.com', 'https://example.com/#fragment']) {
-    assert.ok(validateChannelConfiguration({ ...form, url }, null));
+    assert.ok(validateChannelConfiguration({ ...form, url }, null, t));
   }
   const payload = plain(buildChannelPayload(form, null));
   assert.equal(payload.webhook_url, form.url);
@@ -77,20 +78,20 @@ test('creation requires an HTTPS endpoint and credentials of the correct format'
 test('Teams editing preserves the secret unless a replacement URL is supplied', () => {
   const teams = { ...destination, provider_key: 'teams_workflow', public_config: {} };
   const form = initialChannelForm(teams);
-  assert.equal(validateChannelConfiguration(form, teams), null);
+  assert.equal(validateChannelConfiguration(form, teams, t), null);
   assert.deepEqual(plain(buildChannelPayload(form, teams)), { name: 'Alerts', content_mode: 'excerpt' });
   form.url = 'https://example.com/workflow?secret=new';
-  assert.equal(validateChannelConfiguration(form, teams), null);
+  assert.equal(validateChannelConfiguration(form, teams, t), null);
   assert.equal(buildChannelPayload(form, teams).webhook_url, form.url);
   assert.equal('public_config' in buildChannelPayload(form, teams), false);
 });
 
 test('identity validation permits unchanged names while blocking duplicates and empty names', () => {
   const form = initialChannelForm(destination);
-  assert.equal(validateChannelIdentity(form, [destination], destination), null);
-  assert.ok(validateChannelIdentity(form, [destination], null));
-  assert.ok(validateChannelIdentity({ ...form, name: '   ' }, [], null));
-  assert.ok(validateChannelIdentity({ ...form, name: 'x'.repeat(256) }, [], null));
+  assert.equal(validateChannelIdentity(form, [destination], destination, t), null);
+  assert.ok(validateChannelIdentity(form, [destination], null, t));
+  assert.ok(validateChannelIdentity({ ...form, name: '   ' }, [], null, t));
+  assert.ok(validateChannelIdentity({ ...form, name: 'x'.repeat(256) }, [], null, t));
 });
 
 test('new channels default to result and edits persist the content mode for both providers', () => {
@@ -98,7 +99,7 @@ test('new channels default to result and edits persist the content mode for both
   for (const provider_key of ['teams_workflow', 'webhook']) {
     const channel = { ...destination, provider_key };
     const form = { ...initialChannelForm(channel), contentMode: 'link_only' };
-    assert.equal(validateChannelConfiguration(form, channel), null);
+    assert.equal(validateChannelConfiguration(form, channel, t), null);
     assert.equal(buildChannelPayload(form, channel).content_mode, 'link_only');
   }
 });

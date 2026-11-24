@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Filter } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../../services/api';
+import CardApp from '../ui/CardApp';
+import Alert from '../ui/Alert';
+import ButtonCard from '../ui/ButtonCard';
 
 interface ChatFilterField {
   name: string;
@@ -32,22 +36,23 @@ function ExposedChatFiltersSection({
   value,
   onChange,
 }: ExposedChatFiltersSectionProps) {
+  const { t } = useTranslation('common');
   const [fields, setFields] = useState<ChatFilterField[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const hasCandidates = toolIds.length > 0 || !!siloId;
 
   useEffect(() => {
     if (!hasCandidates) {
       setFields([]);
-      setError(null);
+      setLoadError(false);
       return;
     }
 
     let cancelled = false;
     setLoading(true);
-    setError(null);
+    setLoadError(false);
     apiService
       .getAvailableChatFilterFields(appId, agentId, toolIds, siloId)
       .then((response) => {
@@ -57,7 +62,7 @@ function ExposedChatFiltersSection({
         console.error('Failed to load available chat filter fields', err);
         if (!cancelled) {
           setFields([]);
-          setError('Could not load available filter fields.');
+          setLoadError(true);
         }
       })
       .finally(() => {
@@ -76,56 +81,40 @@ function ExposedChatFiltersSection({
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-      <div className="flex items-center mb-6">
-        <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center mr-4">
-          <Filter className="w-5 h-5 text-indigo-600" aria-hidden="true" />
-        </div>
-        <div>
-          <h3 className="text-xl font-semibold text-gray-900">Chat filters</h3>
-          <p className="text-sm text-gray-500">
-            Metadata fields end users can filter on when chatting with this agent
-          </p>
-        </div>
-      </div>
+    <CardApp
+      icon={Filter}
+      titulo={t('agentFormPage.chatFilters.title')}
+      subtitulo={t('agentFormPage.chatFilters.description')}
+    >
 
-      {loading && <p className="text-sm text-gray-500">Loading available fields…</p>}
+      {loading && <p className="text-sm text-fg dark:text-fg-dark">{t('agentFormPage.chatFilters.loading')}</p>}
 
-      {!loading && error && (
-        <p role="alert" className="text-sm text-red-600">
-          {error}
+      {!loading && loadError && (
+        <Alert type="error" message={t('agentFormPage.chatFilters.loadFailed')} />
+      )}
+
+      {!loading && !loadError && fields.length === 0 && (
+        <p className="text-sm text-fg dark:text-fg-dark">
+          {t('agentFormPage.chatFilters.empty')}
         </p>
       )}
 
-      {!loading && !error && fields.length === 0 && (
-        <p className="text-sm text-gray-500">No metadata fields available from the selected tools/silo yet.</p>
-      )}
-
-      {!loading && !error && fields.length > 0 && (
+      {!loading && !loadError && fields.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {fields.map((field) => (
-            <div key={field.name} className="flex items-center p-3 bg-gray-50 rounded-xl">
-              <input
-                id={`exposed_chat_filter_${field.name}`}
-                type="checkbox"
-                checked={value.includes(field.name)}
-                onChange={() => toggleField(field.name)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <label
-                htmlFor={`exposed_chat_filter_${field.name}`}
-                className="ml-3 text-sm font-medium text-gray-900"
-              >
-                {field.name}
-                {field.description && (
-                  <span className="block text-xs font-normal text-gray-500">{field.description}</span>
-                )}
-              </label>
-            </div>
+            <ButtonCard
+              key={field.name}
+              variant="selectable-check"
+              selected={value.includes(field.name)}
+              ariaLabel={field.name}
+              checkboxLabel={field.name}
+              checkboxHelpText={field.description}
+              onClick={() => toggleField(field.name)}
+            />
           ))}
         </div>
       )}
-    </div>
+    </CardApp>
   );
 }
 

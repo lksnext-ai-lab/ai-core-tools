@@ -51,21 +51,6 @@ def index_env():
 
 
 class TestResourceIndexingStatus:
-    def test_structured_pdf_marker_is_not_indexed(self, index_env):
-        from services.silo_service import SiloService
-
-        resource, store, _ = index_env
-        document = Document(
-            page_content="Structured PDF content",
-            metadata={"_aict_structured_pdf_chunk": True},
-        )
-
-        with patch.object(SiloService, "extract_documents_from_file", return_value=[document]):
-            SiloService.index_resource(resource)
-
-        indexed_docs = store.index_documents.call_args.args[1]
-        assert "_aict_structured_pdf_chunk" not in indexed_docs[0].metadata
-
     def test_success_marks_indexed_and_clears_service_error(self, index_env):
         from services.silo_service import SiloService
         resource, _, health = index_env

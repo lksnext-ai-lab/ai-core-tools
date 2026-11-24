@@ -8,6 +8,7 @@ from tools.agentTools import MCPClientManager
 
 class FakeMCPConfig:
     name = "fake-mcp"
+    config_id = 1
     ssl_verify = True
 
     def __init__(self, connection_config):

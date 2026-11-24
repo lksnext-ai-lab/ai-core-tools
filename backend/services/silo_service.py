@@ -15,7 +15,16 @@ from sqlalchemy.orm import Session
 from utils.logger import get_logger
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from tools.pdf_loader import PdfLoader
+from tools.document_loaders import (
+    DEFAULT_CHUNK_OVERLAP,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_PDF_LOADER,
+    IndexingConfig,
+    InvalidIndexingConfigError,
+    normalize_pdf_loader_options,
+    pdf_loader_catalog,
+    validate_chunking,
+)
 from tools.vector_store_factory import VectorStoreFactory
 from tools.vector_stores.vector_store_interface import VectorStoreInterface
 from models.silo import SiloType
@@ -27,6 +36,7 @@ from utils.error_handlers import (
 )
 from utils.vector_db_immutability import assert_vector_db_type_immutable, assert_embedding_service_immutable
 from schemas.silo_schemas import SiloListItemSchema, SiloDetailSchema, CreateUpdateSiloSchema
+from schemas.indexing_schemas import IndexingOptionsSchema
 from repositories.silo_repository import SiloRepository
 from services.folder_service import FolderService
 from services.service_health_service import ServiceHealthService
@@ -72,9 +82,9 @@ class ResourceNotIndexableError(ResourceIndexingError, ValueError):
     """The resource has nothing that can be indexed (no text, no embedding service)."""
 
 
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
-_STRUCTURED_PDF_CHUNK_FIELD = "_aict_structured_pdf_chunk"
+# Defaults for silos that do not override them (each silo stores its own, see IndexingConfig).
+CHUNK_SIZE = DEFAULT_CHUNK_SIZE
+CHUNK_OVERLAP = DEFAULT_CHUNK_OVERLAP
 
 logger = get_logger(__name__)
 
@@ -115,6 +125,11 @@ _WORD_RE = re.compile(r'[^\W\d_]{3,}', re.UNICODE)
 # e.g. "V I T O R I A" or "p a s a d o". Used to detect and collapse
 # spaced-out OCR output back into normal words.
 _SPACED_WORD_RE = re.compile(r'[^\W\d_](?: [^\W\d_])+', re.UNICODE)
+
+
+def _is_markdown_table_row(line: str) -> bool:
+    """True for a Markdown table row such as ``|2024|35|12.5|`` (PDF and .md tables)."""
+    return len(line) > 2 and line.startswith('|') and line.endswith('|')
 
 
 def _collapse_spaced_letters(line: str) -> str:
@@ -170,6 +185,9 @@ def _clean_chunk_text(text: str) -> str:
     clean_lines = []
     for line in lines:
         s = line.strip()
+        if _is_markdown_table_row(s):    # numeric table rows are content, not noise
+            clean_lines.append(line)
+            continue
         n = len(s)
         alpha = sum(c.isalpha() for c in s)
         if n <= 8 and alpha < 3:          # Rule A
@@ -200,7 +218,9 @@ def _is_meaningful_chunk(text: str) -> bool:
     return True
 
 
-def resolve_search_params(agent: Any, caller_search_params: Optional[dict]) -> tuple[dict, dict]:
+def resolve_search_params(
+    agent: Any, caller_search_params: Optional[dict], *, silo: Any = None
+) -> tuple[dict, dict]:
     """Materialize RAG precedence: caller > agent > system.
 
     Returns ``(search_params, pinned_filter)`` where:
@@ -223,7 +243,8 @@ def resolve_search_params(agent: Any, caller_search_params: Optional[dict]) -> t
             site (e.g. the public API chat endpoint).
     """
     caller: dict = caller_search_params or {}
-    silo = getattr(agent, "silo", None)
+    # ``silo`` overrides ``agent.silo`` (flexible chat: per-turn silo, never set on the ORM agent).
+    silo = silo if silo is not None else getattr(agent, "silo", None)
 
     # ---- Tuning params (caller > agent > server_default) ----
     resolved: dict = {}
@@ -431,15 +452,22 @@ class SiloService:
             session.close()
     
     @staticmethod
+    def is_temp_silo(silo_id: int, db: Session) -> bool:
+        """Whether ``silo_id`` is the hidden temp silo of a playground / Chat conversation (never user-addressable)."""
+        return SiloRepository.is_temp_silo(silo_id, db)
+
+    @staticmethod
     def get_silos_by_app_id(app_id: int, db: Session) -> List[Silo]:
         """
-        Retrieve all silos by app_id
+        Retrieve the user-visible silos by app_id (the hidden temp silos of conversations are excluded)
         """
         return SiloRepository.get_by_app_id(app_id, db)
     
     @staticmethod
     @handle_database_errors("create_or_update_silo")
-    def create_or_update_silo(silo_data: dict, silo_type: Optional[SiloType] = None, db: Session = None) -> Silo:
+    def create_or_update_silo(
+        silo_data: dict, silo_type: Optional[SiloType] = None, db: Session = None, enforce_quota: bool = True
+    ) -> Silo:
         """
         Create a new silo or update an existing one
         
@@ -447,6 +475,7 @@ class SiloService:
             silo_data: Dictionary containing silo data
             silo_type: Optional silo type to set
             db: Database session to use
+            enforce_quota: False only for the hidden temp silos of conversations (never counted against the tier)
             
         Returns:
             Created or updated Silo instance
@@ -517,7 +546,7 @@ class SiloService:
             else:
                 # Enforce per-app silo limit before creation (SaaS mode only)
                 app_id = silo_data.get('app_id')
-                if app_id:
+                if app_id and enforce_quota:
                     from services.tier_enforcement_service import TierEnforcementService
                     TierEnforcementService.check_resource_limit(session, int(app_id), 'silos')
 
@@ -576,6 +605,8 @@ class SiloService:
                     session,
                 )
 
+            SiloService.apply_indexing_settings(silo, silo_data)
+
             # Update silo attributes
             SiloService._update_silo(silo, silo_data)
             
@@ -589,6 +620,55 @@ class SiloService:
             if should_close:
                 session.close()
     
+    @staticmethod
+    def apply_indexing_settings(silo: Silo, data: dict) -> None:
+        """Apply the indexing fields present in ``data`` (see ``IndexingSettingsInput``).
+
+        Nothing is touched when none is sent, so callers that do not manage indexing
+        (and stored values that are no longer valid) never break an unrelated update.
+        A ``None`` value keeps the stored value. Only affects what is indexed from now on.
+        """
+        if not any(key in data for key in ('chunk_size', 'chunk_overlap', 'pdf_loader', 'pdf_loader_options')):
+            return
+        current_size = silo.chunk_size if silo.chunk_size is not None else DEFAULT_CHUNK_SIZE
+        current_overlap = silo.chunk_overlap if silo.chunk_overlap is not None else DEFAULT_CHUNK_OVERLAP
+        current_loader = silo.pdf_loader or DEFAULT_PDF_LOADER
+        try:
+            chunk_size = int(data['chunk_size']) if data.get('chunk_size') is not None else current_size
+            chunk_overlap = (
+                int(data['chunk_overlap']) if data.get('chunk_overlap') is not None else current_overlap
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("chunk_size and chunk_overlap must be integers") from exc
+        pdf_loader = data.get('pdf_loader') or current_loader
+        if data.get('pdf_loader_options') is not None:
+            options = data['pdf_loader_options']
+        elif pdf_loader != current_loader:
+            options = None  # a different loader starts from its own defaults
+        else:
+            options = silo.pdf_loader_options
+        try:
+            validate_chunking(chunk_size, chunk_overlap)
+            options = normalize_pdf_loader_options(pdf_loader, options)
+        except InvalidIndexingConfigError as exc:
+            raise ValidationError(str(exc)) from exc
+        silo.chunk_size = chunk_size
+        silo.chunk_overlap = chunk_overlap
+        silo.pdf_loader = pdf_loader
+        silo.pdf_loader_options = options
+
+    @staticmethod
+    def indexing_detail_fields(silo: Optional[Silo]) -> dict:
+        """Indexing fields for a detail response: the silo's settings plus the form catalog."""
+        config = IndexingConfig.for_silo(silo)
+        return {
+            'chunk_size': config.chunk_size,
+            'chunk_overlap': config.chunk_overlap,
+            'pdf_loader': config.pdf_loader,
+            'pdf_loader_options': dict(config.pdf_loader_options),
+            'indexing_options': IndexingOptionsSchema.build(),
+        }
+
     @staticmethod
     def ensure_embedding_service_owned(service: Optional[EmbeddingService], app_id: int) -> None:
         """Reject an embedding service that is missing or owned by another app (system services are allowed).
@@ -807,23 +887,24 @@ class SiloService:
         return silo
 
     @staticmethod
-    def _create_documents_for_indexing(silo_id: int, contents: List[dict]) -> List[Document]:
+    def _create_documents_for_indexing(
+        silo_id: int, contents: List[dict], indexing: Optional[IndexingConfig] = None
+    ) -> List[Document]:
         """Split each content item into chunks and attach metadata.
 
-        Structured PDF chunks carry ``pdf_blocks`` and must remain intact even
-        when they exceed the ordinary target size. Other content is split normally.
+        File-upload callers pre-split via ``extract_documents_from_file`` before
+        calling ``index_multiple_content`` with the same silo settings, so chunks
+        already ≤ chunk_size produce exactly one chunk per input item (idempotent).
         """
-        splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+        indexing = indexing or IndexingConfig()
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=indexing.chunk_size, chunk_overlap=indexing.chunk_overlap
+        )
         documents: List[Document] = []
         for item in contents:
-            metadata = dict(item.get('metadata', {}))
-            preserve_pdf_chunk = metadata.pop(_STRUCTURED_PDF_CHUNK_FIELD, False) is True
             # silo_id last — a caller-supplied key must not override the parameter.
-            base_metadata = {**metadata, "silo_id": silo_id}
-            if preserve_pdf_chunk:
-                chunks = [item['content']]
-            else:
-                chunks = splitter.split_text(item['content'])
+            base_metadata = {**(item.get('metadata', {})), "silo_id": silo_id}
+            chunks = splitter.split_text(item['content'])
             for chunk in chunks:
                 documents.append(Document(page_content=chunk, metadata=dict(base_metadata)))
         return documents
@@ -854,7 +935,9 @@ class SiloService:
         _ensure_embedding_active(embedding_service)
         logger.debug(f"Usando embedding service: {embedding_service.name if embedding_service else 'None'}")
         
-        docs = SiloService._create_documents_for_indexing(silo_id, documents)
+        docs = SiloService._create_documents_for_indexing(
+            silo_id, documents, IndexingConfig.for_silo(silo)
+        )
         _get_vector_store(silo).index_documents(
             collection_name,
             docs,
@@ -868,13 +951,25 @@ class SiloService:
             logger.warning("metadata_values_cache: invalidation failed after index_multiple_content for silo=%d: %s", silo_id, _cache_exc)
 
     @staticmethod
-    def extract_documents_from_file(file_path: str, file_extension: str, base_metadata: dict = None):
+    def indexing_config(silo_id: int, db: Session) -> IndexingConfig:
+        """The indexing settings of a silo (defaults if it does not exist)."""
+        return IndexingConfig.for_silo(SiloRepository.get_by_id(silo_id, db))
+
+    @staticmethod
+    def extract_documents_from_file(
+        file_path: str,
+        file_extension: str,
+        base_metadata: dict = None,
+        indexing: Optional[IndexingConfig] = None,
+    ):
         """
         Extracts and splits documents from a file, attaching base metadata to each chunk.
         Args:
             file_path: Path to the file to extract from
             file_extension: File extension (e.g., '.pdf', '.docx', '.txt')
             base_metadata: Metadata dict to attach to each document
+            indexing: The target silo's settings (``IndexingConfig.for_silo``); defaults if omitted.
+                Must match the silo the chunks go to, or ``index_multiple_content`` re-splits them.
         Returns:
             List[Document]: List of Document objects
         """
@@ -883,25 +978,22 @@ class SiloService:
 
         if base_metadata is None:
             base_metadata = {}
+        indexing = indexing or IndexingConfig()
 
         if file_extension == '.pdf':
-            loader = PdfLoader(file_path, chunk_size=CHUNK_SIZE)
-        elif file_extension == '.docx':
-            loader = Docx2txtLoader(file_path)
-        elif file_extension in ('.txt', '.md'):
-            loader = TextLoader(file_path, encoding='utf-8')
+            docs = indexing.load_pdf_chunks(file_path)
         else:
-            logger.error(f"Unsupported file type: {file_extension}")
-            raise ValueError(f"Unsupported file type: {file_extension}")
-
-        docs = loader.load()
-        structured_pdf = file_extension == '.pdf' and loader.structured
-        if not structured_pdf:
+            if file_extension == '.docx':
+                loader = Docx2txtLoader(file_path)
+            elif file_extension in ('.txt', '.md'):
+                loader = TextLoader(file_path, encoding='utf-8')
+            else:
+                logger.error(f"Unsupported file type: {file_extension}")
+                raise ValueError(f"Unsupported file type: {file_extension}")
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=CHUNK_SIZE,
-                chunk_overlap=CHUNK_OVERLAP,
+                chunk_size=indexing.chunk_size, chunk_overlap=indexing.chunk_overlap
             )
-            docs = text_splitter.split_documents(docs)
+            docs = text_splitter.split_documents(loader.load())
 
         # Clean known PDF extraction artifacts (e.g. @@@@, 64/64/64/...) from
         # each chunk's content, then discard chunks that are empty or still
@@ -917,9 +1009,6 @@ class SiloService:
 
         for doc in docs:
             doc.metadata.update(base_metadata)
-            doc.metadata.pop(_STRUCTURED_PDF_CHUNK_FIELD, None)
-            if structured_pdf:
-                doc.metadata[_STRUCTURED_PDF_CHUNK_FIELD] = True
             # Only add page number if it exists (PDFs have page metadata, DOCX/TXT don't)
             if "page" in doc.metadata:
                 doc.metadata["page"] = doc.metadata["page"] + 1
@@ -973,7 +1062,7 @@ class SiloService:
 
             updated = _get_vector_store(silo).update_documents_metadata(
                 collection_name,
-                filter_metadata={"resource_id": {"$eq": str(resource.resource_id)}},
+                filter_metadata={"resource_id": {"$eq": resource.resource_id}},
                 metadata_updates=base_metadata,
                 replace=True,
             )
@@ -1031,7 +1120,7 @@ class SiloService:
             updated = _get_vector_store(silo).update_documents_metadata(
                 collection_name,
                 filter_metadata={
-                    "media_id": {"$eq": str(media.media_id)},
+                    "media_id": {"$eq": media.media_id},
                     "content_type": {"$eq": "media_chunk"},
                 },
                 metadata_updates=metadata_updates,
@@ -1131,16 +1220,16 @@ class SiloService:
                 base_metadata["folder_path"] = ""
                 base_metadata["ref"] = os.path.join(str(resource_with_relations.repository_id), resource_with_relations.uri)
 
-            docs = SiloService.extract_documents_from_file(path, file_extension, base_metadata)
+            docs = SiloService.extract_documents_from_file(
+                path, file_extension, base_metadata,
+                IndexingConfig.for_silo(resource_with_relations.repository.silo),
+            )
 
             if not docs:
                 logger.warning(f"No content extracted from resource {resource_with_relations.resource_id} ({resource_with_relations.uri}). The file may be empty or contain only images/scans without text.")
                 message = "No text could be extracted from this file. It may be empty or a scanned document without a text layer."
                 SiloService._set_index_status(resource_with_relations, session, message)
                 raise ResourceNotIndexableError(message)
-
-            for doc in docs:
-                doc.metadata.pop(_STRUCTURED_PDF_CHUNK_FIELD, None)
 
             silo_id = resource_with_relations.repository.silo_id
             embedding_service = resource_with_relations.repository.silo.embedding_service
@@ -1868,6 +1957,7 @@ class SiloService:
                 embedding_services=[],
                 vector_db_options=vector_db_options,
                 ai_services=SiloService.media_ai_service_options(app_id, db, warning_days),
+                **SiloService.indexing_detail_fields(None),
             )
         
         # Existing silo
@@ -1953,6 +2043,7 @@ class SiloService:
                 embedding_service_id=silo.embedding_service_id,
                 transcription_service_id=silo.transcription_service_id,
                 video_ai_service_id=silo.video_ai_service_id,
+                **SiloService.indexing_detail_fields(silo),
                 # Form data
                 output_parsers=output_parsers,
                 embedding_services=embedding_services,
@@ -1993,6 +2084,7 @@ class SiloService:
         for field in ('transcription_service_id', 'video_ai_service_id'):
             if field in fields_set:
                 form_data[field] = getattr(silo_data, field)
+        form_data.update(silo_data.indexing_settings())
         
         # Create or update using the existing service
         silo = SiloService.create_or_update_silo(form_data, db=db)
@@ -2093,23 +2185,29 @@ class SiloService:
         Return all chunks from the same source document, ordered by position.
 
         source_type: "media" or "resource"
-        source_id:   str value of media_id or resource_id (as stored in metadata)
+        source_id:   media_id or resource_id (an integer, possibly as a string)
 
-        Raises ValueError for unsupported source_type.
+        Raises ValueError for unsupported source_type or a non-integer source_id.
 
         Known limitation: this calls ``find_docs_in_collection("")``, which embeds a blank query,
         so it is blocked (``ServiceRetiredError``) for silos whose embedding service is retired.
         """
         if source_type not in ("media", "resource"):
             raise ValueError(f"Unsupported source_type '{source_type}'. Must be 'media' or 'resource'.")
+        # Chunks store media_id/resource_id as integers; the backends compare typed
+        # JSON values, so a string id ("61") would never match.
+        try:
+            numeric_id = int(source_id)
+        except (TypeError, ValueError):
+            raise ValueError(f"source_id must be an integer, got '{source_id}'.") from None
 
         if source_type == "media":
             filter_metadata = {
-                "media_id": {"$eq": source_id},
+                "media_id": {"$eq": numeric_id},
                 "content_type": {"$eq": "media_chunk"},
             }
         else:
-            filter_metadata = {"resource_id": {"$eq": source_id}}
+            filter_metadata = {"resource_id": {"$eq": numeric_id}}
 
         docs = SiloService.find_docs_in_collection(
             silo_id,

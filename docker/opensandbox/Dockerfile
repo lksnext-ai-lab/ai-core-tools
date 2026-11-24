@@ -31,10 +31,14 @@ RUN apt-get update \
 RUN pip install --no-cache-dir "opensandbox-server==${OPENSANDBOX_SERVER_VERSION}"
 
 COPY sandbox.toml /etc/opensandbox/sandbox.toml
+COPY entrypoint.py /usr/local/bin/opensandbox-entrypoint
 
-RUN mkdir -p /var/lib/opensandbox
+RUN mkdir -p /var/lib/opensandbox && chmod 0755 /usr/local/bin/opensandbox-entrypoint
 
 EXPOSE 8080
 
-ENTRYPOINT ["opensandbox-server"]
+# SECURITY: the toml is a template. entrypoint.py renders it (API key from
+# OPENSANDBOX_API_KEY, API bound to the control-network address only), refuses
+# to start without an API key, and then execs opensandbox-server.
+ENTRYPOINT ["/usr/local/bin/opensandbox-entrypoint"]
 CMD ["--config", "/etc/opensandbox/sandbox.toml"]

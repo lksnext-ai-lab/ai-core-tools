@@ -813,7 +813,7 @@ async def index_file_document(
         temp_file_path = await write_temp_file(content, suffix=file_extension)
 
         docs = SiloService.extract_documents_from_file(
-            temp_file_path, file_extension, metadata_dict
+            temp_file_path, file_extension, metadata_dict, SiloService.indexing_config(silo_id, db)
         )
 
         documents_for_indexing = [

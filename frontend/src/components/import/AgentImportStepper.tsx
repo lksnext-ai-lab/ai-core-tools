@@ -13,14 +13,8 @@ import AgentStepDeps from './steps/AgentStepDeps';
 import AgentStepConflicts from './steps/AgentStepConflicts';
 import AgentStepReview from './steps/AgentStepReview';
 import AgentStepResult from './steps/AgentStepResult';
-
-const STEPS: StepDefinition[] = [
-  { id: 'upload', label: 'Upload' },
-  { id: 'deps', label: 'Dependencies' },
-  { id: 'conflicts', label: 'Conflicts', optional: true },
-  { id: 'review', label: 'Review' },
-  { id: 'result', label: 'Result' },
-];
+import Modal from '../ui/Modal';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   appId: number;
@@ -35,6 +29,20 @@ function AgentImportStepper({
   onClose,
   onImportComplete,
 }: Readonly<Props>) {
+  const { t } = useTranslation('common');
+
+  const steps: StepDefinition[] = [
+    { id: 'upload', label: t('importModal.agentSteps.upload') },
+    { id: 'deps', label: t('importModal.agentSteps.dependencies') },
+    {
+      id: 'conflicts',
+      label: t('importModal.agentSteps.conflicts'),
+      optional: true,
+    },
+    { id: 'review', label: t('importModal.agentSteps.review') },
+    { id: 'result', label: t('importModal.agentSteps.result') },
+  ];
+
   // Step state
   const [currentStep, setCurrentStep] = useState(0);
   const [stepStatuses, setStepStatuses] = useState<
@@ -126,13 +134,15 @@ function AgentImportStepper({
         }
       } catch (err: unknown) {
         setValidationError(
-          err instanceof Error ? err.message : 'Failed to validate export file'
+          err instanceof Error
+            ? err.message
+            : t('importModal.agentUpload.validationFailed')
         );
       } finally {
         setIsValidating(false);
       }
     },
-    [appId]
+    [appId, t]
   );
 
   const isNextDisabled = (): boolean => {
@@ -235,7 +245,9 @@ function AgentImportStepper({
       }
     } catch (err: unknown) {
       setImportError(
-        err instanceof Error ? err.message : 'Import failed unexpectedly'
+        err instanceof Error
+          ? err.message
+          : t('importModal.errors.importFailed')
       );
       setStepStatuses((prev) => ({
         ...prev,
@@ -272,134 +284,125 @@ function AgentImportStepper({
   const isFinalStep = currentStep === 4;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col">
-        {/* Header */}
-        <div className="px-6 pt-6 pb-2 border-b border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Import Agent
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="text-gray-400 hover:text-gray-600 text-xl leading-none"
-            >
-              &times;
-            </button>
-          </div>
-        </div>
-
-        {/* Body with Stepper */}
-        <div className="flex-1 min-h-0 flex flex-col px-6 py-4">
-          <StepperContainer
-            steps={STEPS}
-            currentStep={currentStep}
-            stepStatuses={stepStatuses}
-            onStepClick={handleStepClick}
-            onNext={handleNext}
-            onBack={handleBack}
-            onCancel={onClose}
-            nextDisabled={isNextDisabled()}
-            isSubmitting={isImporting}
-            showBack={!isFinalStep}
-            showNext={!isFinalStep}
-            nextLabel={
-              currentStep === 3
-                ? 'Confirm Import'
-                : undefined
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t('importModal.title', {
+        component: t('importModal.agentUpload.components.agent'),
+      })}
+      size="medium"
+    >
+      <StepperContainer
+        steps={steps}
+        currentStep={currentStep}
+        stepStatuses={stepStatuses}
+        onStepClick={handleStepClick}
+        onNext={handleNext}
+        onBack={handleBack}
+        onCancel={onClose}
+        nextDisabled={isNextDisabled()}
+        isSubmitting={isImporting}
+        showBack={!isFinalStep}
+        showNext={!isFinalStep}
+        nextLabel={
+          currentStep === 3
+            ? t('importModal.actions.confirmImport')
+            : t('importModal.actions.next')
+        }
+        backLabel={t('importModal.actions.back')}
+        cancelLabel={
+          isFinalStep
+            ? t('importModal.actions.close')
+            : t('importModal.actions.cancel')
+        }
+        submittingLabel={t('importModal.agentResult.importing')}
+      >
+        {currentStep === 0 && (
+          <AgentStepUpload
+            file={file}
+            onFileSelect={handleFileSelect}
+            preview={preview}
+            isValidating={isValidating}
+            validationError={validationError}
+          />
+        )}
+        {currentStep === 1 && preview && (
+          <AgentStepDeps
+            preview={preview}
+            useExistingAIService={useExistingAIService}
+            onUseExistingAIServiceChange={
+              setUseExistingAIService
             }
-            cancelLabel={isFinalStep ? 'Close' : 'Cancel'}
-          >
-            {currentStep === 0 && (
-              <AgentStepUpload
-                file={file}
-                onFileSelect={handleFileSelect}
-                preview={preview}
-                isValidating={isValidating}
-                validationError={validationError}
-              />
-            )}
-            {currentStep === 1 && preview && (
-              <AgentStepDeps
-                preview={preview}
-                useExistingAIService={useExistingAIService}
-                onUseExistingAIServiceChange={
-                  setUseExistingAIService
-                }
-                selectedAIServiceId={selectedAIServiceId}
-                onSelectedAIServiceIdChange={
-                  setSelectedAIServiceId
-                }
-                availableAIServices={availableAIServices}
-                importBundledSilo={importBundledSilo}
-                onImportBundledSiloChange={
-                  setImportBundledSilo
-                }
-                importBundledOutputParser={
-                  importBundledOutputParser
-                }
-                onImportBundledOutputParserChange={
-                  setImportBundledOutputParser
-                }
-                importBundledMCPConfigs={
-                  importBundledMCPConfigs
-                }
-                onImportBundledMCPConfigsChange={
-                  setImportBundledMCPConfigs
-                }
-                importBundledAgentTools={
-                  importBundledAgentTools
-                }
-                onImportBundledAgentToolsChange={
-                  setImportBundledAgentTools
-                }
-              />
-            )}
-            {currentStep === 2 && preview && (
-              <AgentStepConflicts
-                preview={preview}
-                conflictMode={conflictMode}
-                onConflictModeChange={setConflictMode}
-                newName={newName}
-                onNewNameChange={setNewName}
-              />
-            )}
-            {currentStep === 3 && preview && (
-              <AgentStepReview
-                preview={preview}
-                conflictMode={conflictMode}
-                newName={newName}
-                useExistingAIService={useExistingAIService}
-                selectedAIServiceId={selectedAIServiceId}
-                availableAIServices={availableAIServices}
-                importBundledSilo={importBundledSilo}
-                importBundledOutputParser={
-                  importBundledOutputParser
-                }
-                importBundledMCPConfigs={
-                  importBundledMCPConfigs
-                }
-                importBundledAgentTools={
-                  importBundledAgentTools
-                }
-              />
-            )}
-            {currentStep === 4 && (
-              <AgentStepResult
-                result={importResult}
-                isImporting={isImporting}
-                importError={importError}
-                onClose={onClose}
-                onViewAgent={handleViewAgent}
-                onRetry={handleRetry}
-              />
-            )}
-          </StepperContainer>
-        </div>
-      </div>
-    </div>
+            selectedAIServiceId={selectedAIServiceId}
+            onSelectedAIServiceIdChange={
+              setSelectedAIServiceId
+            }
+            availableAIServices={availableAIServices}
+            importBundledSilo={importBundledSilo}
+            onImportBundledSiloChange={
+              setImportBundledSilo
+            }
+            importBundledOutputParser={
+              importBundledOutputParser
+            }
+            onImportBundledOutputParserChange={
+              setImportBundledOutputParser
+            }
+            importBundledMCPConfigs={
+              importBundledMCPConfigs
+            }
+            onImportBundledMCPConfigsChange={
+              setImportBundledMCPConfigs
+            }
+            importBundledAgentTools={
+              importBundledAgentTools
+            }
+            onImportBundledAgentToolsChange={
+              setImportBundledAgentTools
+            }
+          />
+        )}
+        {currentStep === 2 && preview && (
+          <AgentStepConflicts
+            preview={preview}
+            conflictMode={conflictMode}
+            onConflictModeChange={setConflictMode}
+            newName={newName}
+            onNewNameChange={setNewName}
+          />
+        )}
+        {currentStep === 3 && preview && (
+          <AgentStepReview
+            preview={preview}
+            conflictMode={conflictMode}
+            newName={newName}
+            useExistingAIService={useExistingAIService}
+            selectedAIServiceId={selectedAIServiceId}
+            availableAIServices={availableAIServices}
+            importBundledSilo={importBundledSilo}
+            importBundledOutputParser={
+              importBundledOutputParser
+            }
+            importBundledMCPConfigs={
+              importBundledMCPConfigs
+            }
+            importBundledAgentTools={
+              importBundledAgentTools
+            }
+          />
+        )}
+        {currentStep === 4 && (
+          <AgentStepResult
+            result={importResult}
+            isImporting={isImporting}
+            importError={importError}
+            onClose={onClose}
+            onViewAgent={handleViewAgent}
+            onRetry={handleRetry}
+          />
+        )}
+      </StepperContainer>
+    </Modal>
   );
 }
 

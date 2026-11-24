@@ -20,6 +20,7 @@ from .auth import (
 )
 from db.database import get_db
 
+from services.chat_attachment_service import ChatAttachmentService
 from services.file_management_service import FileManagementService, FileReference
 from services.conversation_service import ConversationService
 from services.playground_media_service import PlaygroundMediaService, is_vectorizable_file
@@ -92,6 +93,13 @@ async def attach_file(
             user_context["conversation_id"] = effective_conversation_id
             logger.info(f"Auto-created conversation {effective_conversation_id} for file attachment to agent {agent_id}")
 
+        # Only a client-supplied id needs checking: a conversation auto-created above is the caller's by construction.
+        if conversation_id:
+            conversation_id = ChatAttachmentService.require_owned_conversation(
+                db, conversation_id, user_context, agent_id, bool(agent.has_memory)
+            )
+            user_context["conversation_id"] = conversation_id
+            effective_conversation_id = conversation_id  # canonical id: "012" must not become a directory of its own
         file_service = FileManagementService()
         file_ref = await file_service.upload_file(
             file=file,
@@ -188,10 +196,13 @@ async def detach_file(
     - If conversation_id is not provided, removes from the global session
     """
     validate_api_key_for_app(app_id, api_key, db)
-    validate_agent_ownership(db, agent_id, app_id)
+    agent = validate_agent_ownership(db, agent_id, app_id)
 
     try:
         user_context = create_api_key_user_context(app_id, api_key, conversation_id)
+        conversation_id = ChatAttachmentService.require_owned_conversation(
+            db, conversation_id, user_context, agent_id, bool(agent.has_memory)
+        )
 
         file_service = FileManagementService()
         success = await file_service.remove_file(
@@ -247,10 +258,13 @@ async def list_attached_files(
     - If conversation_id is not provided, returns files from the global session
     """
     validate_api_key_for_app(app_id, api_key, db)
-    validate_agent_ownership(db, agent_id, app_id)
+    agent = validate_agent_ownership(db, agent_id, app_id)
 
     try:
         user_context = create_api_key_user_context(app_id, api_key, conversation_id)
+        conversation_id = ChatAttachmentService.require_owned_conversation(
+            db, conversation_id, user_context, agent_id, bool(agent.has_memory)
+        )
 
         file_service = FileManagementService()
         files_data = await file_service.list_attached_files(
@@ -321,10 +335,13 @@ async def download_file(
     The URL is signed and time-limited for security.
     """
     validate_api_key_for_app(app_id, api_key, db)
-    validate_agent_ownership(db, agent_id, app_id)
+    agent = validate_agent_ownership(db, agent_id, app_id)
 
     try:
         user_context = create_api_key_user_context(app_id, api_key, conversation_id)
+        conversation_id = ChatAttachmentService.require_owned_conversation(
+            db, conversation_id, user_context, agent_id, bool(agent.has_memory)
+        )
 
         file_service = FileManagementService()
 

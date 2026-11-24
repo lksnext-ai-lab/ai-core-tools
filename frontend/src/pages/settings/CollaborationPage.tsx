@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Users, Handshake, Crown, Info, Lock, Lightbulb, AlertTriangle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Users, Handshake, Crown, AlertTriangle } from 'lucide-react';
 import CollaborationForm from '../../components/forms/CollaborationForm';
 import { apiService } from '../../services/api';
 import { useUser } from '../../contexts/UserContext';
@@ -10,9 +11,15 @@ import { AppRole } from '../../types/roles';
 import ReadOnlyBanner from '../../components/ui/ReadOnlyBanner';
 import Alert from '../../components/ui/Alert';
 import Table from '../../components/ui/Table';
+import { FormSelect } from '../../components/ui/FormField';
+import ButtonApp from '../../components/ui/ButtonApp';
+import { Badge, StatusBadge, type StatusType } from '../../components/ui/Badge';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { errorMessage } from '../../constants/messages';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { Title } from '../../components/ui/Title';
+import { CardApp } from '../../components/ui/CardApp';
 
 interface Collaborator {
   id: number;
@@ -35,6 +42,7 @@ interface AppOwner {
 
 function CollaborationPage() {
   const { appId } = useParams();
+  const { t, i18n } = useTranslation('common');
   const { user } = useUser();
   const settingsCache = useSettingsCache();
   const confirm = useConfirm();
@@ -155,7 +163,7 @@ function CollaborationPage() {
       // Cache the response
       settingsCache.setCollaborators(appId, response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load collaborators');
+      setError(err instanceof Error ? err.message : t('collaborationPage.errors.loadFailed'));
       console.error('Error loading collaborators:', err);
     } finally {
       setLoading(false);
@@ -177,7 +185,7 @@ function CollaborationPage() {
       // Cache the response
       settingsCache.setCollaborators(appId, response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load collaborators');
+      setError(err instanceof Error ? err.message : t('collaborationPage.errors.loadFailed'));
       console.error('Error loading collaborators:', err);
     } finally {
       setLoading(false);
@@ -190,9 +198,9 @@ function CollaborationPage() {
     const result = await mutate(
       () => apiService.inviteCollaborator(Number.parseInt(appId), email, role),
       {
-        loading: 'Sending invitation…',
-        success: `Invitation sent to ${email}`,
-        error: (err) => errorMessage(err, 'Failed to send invitation'),
+        loading: t('collaborationPage.notifications.sendingInvitation'),
+        success: t('collaborationPage.notifications.invitationSent', { email }),
+        error: () => t('collaborationPage.errors.sendInvitationFailed'),
       },
     );
     if (result === undefined) return;
@@ -211,9 +219,9 @@ function CollaborationPage() {
     const result = await mutate(
       () => apiService.updateCollaboratorRole(Number.parseInt(appId), userId, newRole),
       {
-        loading: 'Updating role…',
-        success: 'Role updated',
-        error: (err) => errorMessage(err, 'Failed to update role'),
+        loading: t('collaborationPage.notifications.updatingRole'),
+        success: t('collaborationPage.notifications.roleUpdated'),
+        error: (err) => errorMessage(err, t('collaborationPage.errors.updateRoleFailed')),
       },
     );
     if (result === undefined) return;
@@ -231,21 +239,21 @@ function CollaborationPage() {
 
     const target = collaborators.find((c) => c.user_id === userId);
     const ok = await confirm({
-      title: 'Remove collaborator?',
+      title: t('collaborationPage.remove.title'),
       message: target
-        ? `Remove ${target.user_name || target.user_email} from this app? They will lose access immediately.`
-        : 'Remove this collaborator? They will lose access to this app.',
+        ? t('collaborationPage.remove.namedMessage', { name: target.user_name || target.user_email })
+        : t('collaborationPage.remove.message'),
       variant: 'danger',
-      confirmLabel: 'Remove',
+      confirmLabel: t('collaborationPage.actions.remove'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.removeCollaborator(Number.parseInt(appId), userId),
       {
-        loading: 'Removing collaborator…',
-        success: 'Collaborator removed',
-        error: (err) => errorMessage(err, 'Failed to remove collaborator'),
+        loading: t('collaborationPage.notifications.removingCollaborator'),
+        success: t('collaborationPage.notifications.collaboratorRemoved'),
+        error: (err) => errorMessage(err, t('collaborationPage.errors.removeCollaboratorFailed')),
       },
     );
     if (result === undefined) return;
@@ -255,16 +263,16 @@ function CollaborationPage() {
     settingsCache.setCollaborators(appId, newCollaborators);
   }
 
-  const getStatusBadge = (status: string) => {
+  const getStatusType = (status: string): StatusType => {
     switch (status.toLowerCase()) {
       case 'accepted':
-        return 'bg-green-100 text-green-800';
+        return 'active';
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'pending';
       case 'declined':
-        return 'bg-red-100 text-red-800';
+        return 'error';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'inactive';
     }
   };
 
@@ -283,13 +291,18 @@ function CollaborationPage() {
     }
   };
 
+  const getRoleLabel = (role: string) => t(`collaborationPage.roles.${role.toLowerCase()}`, {
+    defaultValue: role.charAt(0).toUpperCase() + role.slice(1),
+  });
+
+  const getStatusLabel = (status: string) => t(`collaborationPage.status.${status.toLowerCase()}`, {
+    defaultValue: status.charAt(0).toUpperCase() + status.slice(1),
+  });
+
   if (loading) {
     return (
       
-        <div className="p-6 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading collaboration settings...</p>
-        </div>
+        <LoadingState variant="page" message={t('collaborationPage.loading')} />
       
     );
   }
@@ -306,40 +319,27 @@ function CollaborationPage() {
   let inviteCollaboratorSection;
   if (canManage) {
     inviteCollaboratorSection = (
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900 flex items-center">
-            <Users className="w-5 h-5 text-indigo-400 mr-2" />
-            {' '}Invite Collaborator
+      <CardApp className="px-6 py-4">
+        <h3 className="font-display text-lg font-normal text-fg dark:text-fg-dark flex items-center">
+            <Users className="w-5 h-5 text-bronze dark:text-bronze-dark mr-2" />
+            {' '}{t('collaborationPage.invite.title')}
           </h3>
-          <p className="text-sm text-gray-500 mt-1">
-            Invite users to collaborate on this app. They'll receive an email invitation.
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
+            {t('collaborationPage.invite.description')}
           </p>
-        </div>
-        <div className="p-6">
+      
+        <div className="py-6">
           <CollaborationForm onSubmit={handleInviteUser} />
         </div>
-      </div>
+      </CardApp>
     );
   } else {
     inviteCollaboratorSection = (
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <Info className="w-5 h-5 text-yellow-400" />
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-yellow-800">
-              Collaborator Access
-            </h3>
-            <div className="mt-2 text-sm text-yellow-700">
-              <p>
-                You have collaborator access to this app. Only administrators can invite new collaborators.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Alert
+        type="warning"
+        title={t('collaborationPage.access.title')}
+        message={t('collaborationPage.access.message')}
+      />
     );
   }
 
@@ -347,53 +347,50 @@ function CollaborationPage() {
     
       <div className="p-6 space-y-8">
         {/* Header */}
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Collaboration</h2>
-          <p className="text-gray-600">Manage team access and permissions for this app</p>
-        </div>
+        <Title variant="titSecundario" titulo={t('collaborationPage.title')} subtitulo={t('collaborationPage.subtitle')} />
 
         {!canManage && <ReadOnlyBanner userRole={userRole} minRole={AppRole.ADMINISTRATOR} />}
 
         {inviteCollaboratorSection}
 
         {/* Current Collaborators */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900 flex items-center">
-              <Handshake className="w-5 h-5 text-indigo-400 mr-2" />
-              Team Members ({allMembers.length})
-            </h3>
-            <p className="text-sm text-gray-500 mt-1">
-              {canManage ? 'Manage existing collaborators and their permissions' : 'View team members and their roles'}
-            </p>
-          </div>
+        <div>
+          <h3 className="font-display text-lg font-normal text-fg dark:text-fg-dark flex items-center">
+            <Handshake className="w-5 h-5 text-bronze dark:text-bronze-dark mr-2" />
+            {t('collaborationPage.teamMembers', { count: allMembers.length })}
+          </h3>
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
+            {canManage ? t('collaborationPage.team.manageDescription') : t('collaborationPage.team.viewDescription')}
+          </p>
           
           <Table
+            className="mt-4"
+            stickyEdgeColumns
             data={allMembers}
             keyExtractor={(member) => member.id.toString()}
             columns={[
               {
-                header: 'User',
+                header: t('collaborationPage.table.user'),
                 render: (member) => (
                   <div className="flex items-center">
                     <div className="flex-shrink-0 h-8 w-8">
-                      <div className={`h-8 w-8 rounded-full ${member.role === 'owner' ? 'bg-blue-600' : 'bg-indigo-500'} flex items-center justify-center`}>
-                        <span className="text-sm font-medium text-white">
+                      <div className={`h-8 w-8 rounded-full bg-ink-on-dark dark:bg-ink-on flex items-center justify-center`}>
+                        <span className="text-sm font-medium text-ink-on dark:text-ink-on-dark">
                           {member.user_email.charAt(0).toUpperCase()}
                         </span>
                       </div>
                     </div>
                     <div className="ml-3">
-                      <div className="text-sm font-medium text-gray-900 flex items-center">
+                      <div className="text-sm font-medium text-fg dark:text-fg-dark flex items-center">
                         {member.user_name || member.user_email}
                         {user?.user_id === member.user_id && (
-                          <span className={`ml-2 text-xs font-semibold ${member.role === 'owner' ? 'text-blue-600' : 'text-indigo-600'}`}>
-                            (You)
+                          <span className="ml-2 text-xs font-semibold text-fg dark:text-fg-dark">
+                            ({t('collaborationPage.you')})
                           </span>
                         )}
                       </div>
                       {member.user_name && (
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
                           {member.user_email}
                         </div>
                       )}
@@ -402,24 +399,30 @@ function CollaborationPage() {
                 )
               },
               {
-                header: 'Role',
+                header: t('collaborationPage.table.role'),
                 render: (member) => (
                   <div className="flex items-center gap-1">
+                    
                     {member.role === 'owner' ? (
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
-                        <Crown className="w-3 h-3 mr-1" /> Owner
-                      </span>
+                      <Badge
+                        label={t('collaborationPage.roles.owner')}
+                        variant="secondary"
+                        icon={<Crown className="w-3 h-3" />}
+                      />
                     ) : (
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadge(member.role)}`}>
-                        {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
-                      </span>
+                      <Badge
+                        label={getRoleLabel(member.role)}
+                        variant="custom"
+                        className={getRoleBadge(member.role)}
+                      />
+                      
                     )}
                     {member.platform_role === 'viewer' && member.role !== 'viewer' && member.role !== 'owner' && (
                       <span className="relative group inline-flex items-center">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 cursor-help flex-shrink-0" />
-                        <span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 hidden group-hover:block w-56 rounded-lg bg-yellow-50 border border-yellow-200 px-3 py-2.5 text-xs shadow-md z-50">
-                          <span className="block font-semibold text-amber-700 mb-1">Platform viewer</span>
-                          <span className="block text-gray-600 leading-relaxed whitespace-normal">This user can only see agents published in the marketplace. They cannot edit app content.</span>
+                        <AlertTriangle className="w-3.5 h-3.5 text-bronze dark:text-bronze-dark cursor-help flex-shrink-0" />
+                        <span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 hidden group-hover:block w-56 rounded-lg bg-bronze-bg border border-bronze-border dark:bg-bronze-bg-dark dark:border-bronze-border-dark px-3 py-2.5 text-xs shadow-md z-50">
+                          <span className="block font-semibold text-bronze-strong dark:text-bronze-strong-dark mb-1">{t('collaborationPage.platformViewer.title')}</span>
+                          <span className="text-bronze dark:text-bronze-dark leading-relaxed whitespace-normal">{t('collaborationPage.platformViewer.description')}</span>
                         </span>
                       </span>
                     )}
@@ -427,66 +430,70 @@ function CollaborationPage() {
                 )
               },
               {
-                header: 'Status',
+                header: t('collaborationPage.table.status'),
                 render: (member) => (
                   member.role === 'owner' ? (
-                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                      Active
-                    </span>
+                    <StatusBadge status="active" customLabel={t('collaborationPage.status.active')} />
                   ) : (
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(member.status)}`}>
-                      {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
-                    </span>
+                    <StatusBadge
+                      status={getStatusType(member.status)}
+                      customLabel={getStatusLabel(member.status)}
+                    />
                   )
                 )
               },
               {
-                header: 'Since',
+                header: t('collaborationPage.table.since'),
                 render: (member) => (
                   member.role === 'owner' ? (
-                    <div className="text-xs text-gray-400">
-                      App creator
+                    <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+                      {t('collaborationPage.appCreator')}
                     </div>
                   ) : (
-                    <>
-                      <div>
-                        {new Date(member.invited_at).toLocaleDateString()}
-                      </div>
-                      <div className="text-xs">
-                        by {member.invited_by_name || 'Unknown'}
-                      </div>
-                    </>
+                    <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">
+                      {new Date(member.invited_at).toLocaleDateString(i18n.resolvedLanguage)}<br />
+                      {t('collaborationPage.invitedBy', { name: member.invited_by_name || t('collaborationPage.unknown') })}
+                    </div>
                   )
                 ),
-                className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+                className: 'px-6 py-4 whitespace-nowrap text-sm text-fg-secondary dark:text-fg-secondary-dark'
               },
               ...(canManage ? [{
-                header: 'Actions',
+                header: t('collaborationPage.table.actions'),
+                sticky: 'right' as const,
                 render: (member: Collaborator) => (
                   member.role === 'owner' ? (
-                    <span className="text-gray-400">-</span>
+                    <span className="text-fg-secondary dark:text-fg-secondary-dark">-</span>
                   ) : (
                     <div className="flex space-x-2">
                       {member.status === 'accepted' && member.role !== 'owner' && (
-                        <select
+                        <FormSelect
+                          label={t('collaborationPage.table.role')}
+                          labelClassName="sr-only"
+                          id={`collaborator-role-${member.user_id}`}
                           value={member.role}
                           onChange={(e) => void handleUpdateRole(member.user_id, e.target.value)}
                           disabled={member.platform_role === 'viewer'}
-                          title={member.platform_role === 'viewer' ? 'Viewer platform role — cannot be promoted' : undefined}
-                          className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
-                        >
-                          {member.platform_role !== 'viewer' && <option value="editor">Editor</option>}
-                          {member.platform_role !== 'viewer' && <option value="administrator">Administrator</option>}
-                          <option value="viewer">Viewer</option>
-                        </select>
+                          title={member.platform_role === 'viewer' ? t('collaborationPage.platformViewer.cannotPromote') : undefined}
+                          className="min-w-32"
+                          options={[
+                            ...(member.platform_role !== 'viewer'
+                              ? [
+                                  { value: 'editor', label: t('collaborationPage.roles.editor') },
+                                  { value: 'administrator', label: t('collaborationPage.roles.administrator') },
+                                ]
+                              : []),
+                            { value: 'viewer', label: t('collaborationPage.roles.viewer') },
+                          ]}
+                        />
                       )}
                       {member.role !== 'owner' && (
-                        <button 
+                        <ButtonApp
+                          label={t('collaborationPage.actions.remove')}
                           onClick={() => void handleRemoveCollaborator(member.user_id)}
-                          className="text-red-600 hover:text-red-900 transition-colors"
-                        >
-                          Remove
-                        </button>
+                          variant="dangerSolid"
+                          size="small"
+                        />
                       )}
                     </div>
                   )
@@ -494,12 +501,12 @@ function CollaborationPage() {
                 className: 'px-6 py-4 whitespace-nowrap text-sm font-medium'
               }] : [])
             ]}
-            rowClassName={(member) => member.role === 'owner' ? "bg-blue-50" : "hover:bg-gray-50"}
-            emptyIcon={<Users className="w-10 h-10 text-gray-300" />}
-            emptyMessage="No Collaborators Yet"
+            rowClassName={(member) => member.role === 'owner' ? "bg-surface-tint dark:bg-surface-tint-dark" : ""}
+            emptyIcon={<Users className="w-10 h-10 text-fg-secondary dark:text-fg-secondary-dark" />}
+            emptyMessage={t('collaborationPage.empty.title')}
             emptySubMessage={canManage 
-              ? "This app doesn't have any collaborators. Invite users above to start sharing."
-              : "This app doesn't have any other collaborators yet."}
+              ? t('collaborationPage.empty.manageMessage')
+              : t('collaborationPage.empty.viewMessage')}
             loading={loading}
           />
         </div>
@@ -507,49 +514,32 @@ function CollaborationPage() {
         {/* Information Boxes */}
         <div className="space-y-4">
           {/* Collaboration Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <Lightbulb className="w-5 h-5 text-blue-400" />
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-blue-800">
-                  About Collaboration
-                </h3>
-                <div className="mt-2 text-sm text-blue-700">
-                  <p>
-                    Collaboration allows multiple users to work on the same app. Invited users will 
-                    receive an email invitation and can access the app once they accept.
-                    {!isOwner && " You can leave this collaboration anytime from the apps list."}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <Alert
+            type="info"
+            title={t('collaborationPage.about.title')}
+            message={(
+              <>
+                {t('collaborationPage.about.description')}
+                {!isOwner && <> {t('collaborationPage.about.leaveNotice')}</>}
+              </>
+            )}
+          />
 
           {/* Security Notice */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <Lock className="w-5 h-5 text-yellow-400" />
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-yellow-800">
-                  Collaboration Rules
-                </h3>
-                <div className="mt-2 text-sm text-yellow-700">
-                  <ul className="list-disc list-inside space-y-1">
-                    <li>Only app owners can invite new collaborators</li>
-                    <li>Collaborators can be invited as editors or administrators</li>
-                    <li>Administrators have the same permissions as owners except managing collaborators</li>
-                    <li>Editors can modify app content but cannot manage collaborators or settings</li>
-                    <li>Owners have full control and can manage all collaborators</li>
-                    {!isOwner && <li>You can leave this collaboration from the main apps list</li>}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
+          <Alert
+            type="warning"
+            title={t('collaborationPage.rules.title')}
+            message={(
+              <ul className="list-disc list-inside space-y-1">
+                <li>{t('collaborationPage.rules.ownerInvites')}</li>
+                <li>{t('collaborationPage.rules.invitedRoles')}</li>
+                <li>{t('collaborationPage.rules.administratorPermissions')}</li>
+                <li>{t('collaborationPage.rules.editorPermissions')}</li>
+                <li>{t('collaborationPage.rules.ownerPermissions')}</li>
+                {!isOwner && <li>{t('collaborationPage.rules.leave')}</li>}
+              </ul>
+            )}
+          />
         </div>
       </div>
     

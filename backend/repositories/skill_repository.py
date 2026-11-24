@@ -69,32 +69,65 @@ class SkillRepository:
         )
 
     @staticmethod
-    def get_selectable_for_app(db: Session, app_id: int, agent_id: Optional[int] = None) -> List[Skill]:
-        """Skills an agent form of the app may pick from.
-
-        Own app skills (any enabled state) plus ENABLED system skills whose folded name does not collide with an
-        app skill (the app skill wins). When ``agent_id`` is given, system skills already attached to that agent
-        stay listed even if disabled or colliding, so the form can flag them (is_enabled=False).
-        """
-        if app_id is None:
-            raise ValueError("app_id is required")
+    def _selectable_conditions(app_id: int) -> list:
+        """OR-conditions of the "selectable skill" rule: own app skills, plus enabled system skills whose folded
+        name is not shadowed by an app skill (the app skill wins). Single definition of the rule."""
         app_skill = aliased(Skill)
         collides = exists().where(
             app_skill.app_id == app_id,
             _fold_col(app_skill.name) == _fold_col(Skill.name),
         )
-        conditions = [
+        return [
             Skill.app_id == app_id,
             and_(Skill.app_id.is_(None), Skill.is_enabled.is_(True), ~collides),
         ]
+
+    @staticmethod
+    def get_selectable_for_app(
+        db: Session, app_id: int, agent_id: Optional[int] = None, exclude_frozen: bool = False
+    ) -> List[Skill]:
+        """Skills an agent form of the app may pick from.
+
+        Own app skills (any enabled state) plus ENABLED system skills whose folded name does not collide with an
+        app skill (the app skill wins). When ``agent_id`` is given, system skills already attached to that agent
+        stay listed even if disabled or colliding, so the form can flag them (is_enabled=False).
+        ``exclude_frozen`` hides skills frozen by a tier downgrade (the App Chat; the agent form keeps them).
+        """
+        if app_id is None:
+            raise ValueError("app_id is required")
+        conditions = SkillRepository._selectable_conditions(app_id)
         if agent_id:
             attached = select(AgentSkill.skill_id).where(AgentSkill.agent_id == agent_id)
             conditions.append(and_(Skill.app_id.is_(None), Skill.skill_id.in_(attached)))
+        query = db.query(Skill).options(
+            load_only(Skill.skill_id, Skill.name, Skill.description, Skill.app_id, Skill.is_enabled)
+        )
+        if exclude_frozen:
+            query = query.filter(Skill.is_frozen.is_(False))
         return (
-            db.query(Skill)
-            .options(load_only(Skill.skill_id, Skill.name, Skill.description, Skill.app_id, Skill.is_enabled))
+            query
             .filter(or_(*conditions))
             .order_by(Skill.app_id.is_(None), Skill.name, Skill.skill_id)
+            .all()
+        )
+
+    @staticmethod
+    def get_selectable_by_ids(db: Session, app_id: int, skill_ids: List[int]) -> List[Skill]:
+        """Fully loaded skills among ``skill_ids`` that satisfy the selectable rule of ``get_selectable_for_app``
+        (cost follows the selection, not the app) and are not frozen by a tier downgrade. Ordered by ``skill_id``;
+        app skills may be disabled (callers check ``is_enabled``)."""
+        if app_id is None:
+            raise ValueError("app_id is required")
+        if not skill_ids:
+            return []
+        return (
+            db.query(Skill)
+            .filter(
+                Skill.skill_id.in_(list(skill_ids)),
+                Skill.is_frozen.is_(False),
+                or_(*SkillRepository._selectable_conditions(app_id)),
+            )
+            .order_by(Skill.skill_id)
             .all()
         )
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../services/api';
 import { useDeploymentMode } from '../contexts/DeploymentModeContext';
 
@@ -34,6 +35,7 @@ interface UseSubscriptionReturn {
 }
 
 export const useSubscription = (): UseSubscriptionReturn => {
+  const { t } = useTranslation('common');
   const { isSaasMode } = useDeploymentMode();
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
@@ -55,11 +57,11 @@ export const useSubscription = (): UseSubscriptionReturn => {
       setSubscription(subData as SubscriptionData);
       setUsage(usageData as UsageData);
     } catch (err: any) {
-      setError(err?.message ?? 'Failed to load subscription data');
+      setError(err?.message ?? t('subscriptionPage.loadFailed'));
     } finally {
       setIsLoading(false);
     }
-  }, [isSaasMode]);
+  }, [isSaasMode, t]);
 
   useEffect(() => {
     void fetchData();

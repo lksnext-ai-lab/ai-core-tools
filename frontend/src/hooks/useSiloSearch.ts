@@ -215,7 +215,7 @@ export function useSiloSearch(
     apiService.getAgents(Number.parseInt(appId))
       .then((agents: unknown) => {
         const arr = (agents as Array<{ id: number; name: string; silo_id?: number | null }>) ?? [];
-        setAppAgentsForSilo(arr.filter((a) => a.silo_id === Number.parseInt(siloId)));
+        setAppAgentsForSilo(arr.filter((agent) => agent.silo_id === Number.parseInt(siloId)));
       })
       .catch(() => { /* ignore */ });
   }, [appId, siloId]);

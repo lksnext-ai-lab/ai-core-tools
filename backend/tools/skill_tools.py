@@ -119,9 +119,21 @@ def resolve_agent_skills(skill_associations: List[AgentSkill]) -> List[Skill]:
     Returns:
         Ordered list of resolved Skill objects the agent should use this turn
     """
+    return resolve_skills(
+        assoc.skill for assoc in skill_associations
+    )
+
+
+def resolve_skills(skills: Iterable[Optional[Skill]]) -> List[Skill]:
+    """Resolve an iterable of ``Skill`` objects (``None`` entries ignored).
+
+    Same rules as :func:`resolve_agent_skills` (which delegates here): drops disabled
+    skills and ``fold_name`` collisions (app skill wins over system skill, ties by
+    ``skill_id``) and preserves the input ordering for the survivors. Also used by the
+    flexible chat, which selects skills directly instead of via ``AgentSkill``.
+    """
     candidates: List[Skill] = []
-    for assoc in skill_associations:
-        skill = assoc.skill
+    for skill in skills:
         if not skill:
             continue
         if skill.is_enabled is not None and not skill.is_enabled:

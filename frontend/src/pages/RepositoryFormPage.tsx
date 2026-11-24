@@ -1,11 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
-import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../components/ui/ServiceOptionStatus';
-import type { ServiceOptionLike } from '../utils/serviceLifecycle';
+import { errorMessage } from '../constants/messages';
+import Title from '../components/ui/Title';
+import Alert from '../components/ui/Alert';
+import { FormField, FormSelect } from '../components/ui/FormField';
+import { FormActions } from '../components/ui/FormActions';
+import { LoadingState } from '../components/ui/LoadingState';
+import { ServiceOptionStatus, serviceStatusId } from '../components/ui/ServiceOptionStatus';
+import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../utils/serviceLifecycle';
 import { MediaServicesFields } from '../components/forms/MediaServicesFields';
+import { IndexingSettingsFields } from '../components/forms/IndexingSettingsFields';
+import CardApp from '../components/ui/CardApp';
+import type { IndexingOptions, IndexingSettings } from '../types/indexing';
+import {
+  hasIndexingErrors,
+  indexingSettingsErrors,
+  initialIndexingSettings,
+  toIndexingPayload,
+} from '../utils/indexingSettings';
 
 interface RepositoryFormData {
   name: string;
@@ -32,6 +47,7 @@ interface AIService extends ServiceOptionLike {
 
 const RepositoryFormPage: React.FC = () => {
   const { appId, repositoryId } = useParams<{ appId: string; repositoryId: string }>();
+  const { t } = useTranslation('common');
   const navigate = useNavigate();
   const mutate = useApiMutation();
   const [loading, setLoading] = useState(false);
@@ -42,6 +58,8 @@ const RepositoryFormPage: React.FC = () => {
   // Values saved on the loaded repository (D-4): the only retired services that stay selectable.
   const [savedMedia, setSavedMedia] = useState<{ transcription?: number | null; video?: number | null }>({});
   const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
+  const [indexingOptions, setIndexingOptions] = useState<IndexingOptions | null>(null);
+  const [indexing, setIndexing] = useState<IndexingSettings | null>(null);
   const [formData, setFormData] = useState<RepositoryFormData>({
     name: '',
     embedding_service_id: undefined,
@@ -86,6 +104,8 @@ const RepositoryFormPage: React.FC = () => {
         setVectorDbOptions(availableVectorDbOptions);
         setAiServices(repository.ai_services ?? []);
         setSavedMedia({ transcription: repository.transcription_service_id, video: repository.video_ai_service_id });
+        setIndexingOptions(repository.indexing_options ?? null);
+        setIndexing(initialIndexingSettings(repository));
 
         const normalizedVectorDbType = (repository.vector_db_type || 'PGVECTOR').toUpperCase();
         const resolvedVectorDbType = availableVectorDbOptions.some((option) => option.code === normalizedVectorDbType)
@@ -106,49 +126,54 @@ const RepositoryFormPage: React.FC = () => {
         });
       } catch (err) {
         console.error('Error loading repository:', err);
-        setError('Failed to load repository');
+        setError(t('repositoryFormPage.errors.loadRepository'));
       } finally {
         setLoading(false);
       }
     };
 
     void fetchRepository();
-  }, [appId, repositoryId]);
+  }, [appId, repositoryId, t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!appId) {
-      setError('Invalid application context');
+      setError(t('repositoryFormPage.errors.invalidAppContext'));
       return;
     }
 
     const appIdNumber = Number.parseInt(appId, 10);
     if (Number.isNaN(appIdNumber)) {
-      setError('Invalid application context');
+      setError(t('repositoryFormPage.errors.invalidAppContext'));
       return;
     }
 
     const trimmedName = formData.name.trim();
     if (!trimmedName) {
-      setError('Repository name is required');
+      setError(t('repositoryFormPage.errors.nameRequired'));
       return;
     }
 
     if (isNewRepository && !formData.vector_db_type) {
-      setError('Vector database selection is required');
+      setError(t('repositoryFormPage.errors.vectorDatabaseRequired'));
       return;
     }
 
     if (isNewRepository && !formData.embedding_service_id) {
-      setError('Embedding service is required for new repositories');
+      setError(t('repositoryFormPage.errors.embeddingServiceRequired'));
+      return;
+    }
+
+    if (indexing && indexingOptions && hasIndexingErrors(indexingSettingsErrors(indexing, indexingOptions))) {
+      setError(t('siloFormPage.indexing.validation.invalid'));
       return;
     }
 
     const normalizedVectorDbType = formData.vector_db_type.toUpperCase();
     const repositoryIdNumber = repositoryId ? Number.parseInt(repositoryId, 10) : 0;
     if (!isNewRepository && Number.isNaN(repositoryIdNumber)) {
-      setError('Invalid repository context');
+      setError(t('repositoryFormPage.errors.invalidRepositoryContext'));
       return;
     }
 
@@ -158,6 +183,7 @@ const RepositoryFormPage: React.FC = () => {
       vector_db_type: normalizedVectorDbType,
       transcription_service_id: formData.transcription_service_id,
       video_ai_service_id: formData.video_ai_service_id,
+      ...(indexing ? toIndexingPayload(indexing) : {}),
     };
 
     setError(null);
@@ -169,12 +195,12 @@ const RepositoryFormPage: React.FC = () => {
           : apiService.updateRepository(appIdNumber, repositoryIdNumber, payload),
       {
         loading: isNewRepository
-          ? MESSAGES.CREATING('repository')
-          : MESSAGES.UPDATING('repository'),
+          ? t('repositoryFormPage.creating')
+          : t('repositoryFormPage.updating'),
         success: isNewRepository
-          ? MESSAGES.CREATED('repository')
-          : MESSAGES.UPDATED('repository'),
-        error: (err) => errorMessage(err, MESSAGES.SAVE_FAILED('repository')),
+          ? t('repositoryFormPage.created')
+          : t('repositoryFormPage.updated'),
+        error: (err) => errorMessage(err, t('repositoryFormPage.errors.saveFailed')),
       },
     );
     setSaving(false);
@@ -190,126 +216,92 @@ const RepositoryFormPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
+      <LoadingState variant="page" />
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="mx-auto max-w-4xl space-y-6">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">
-          {isNewRepository ? 'Create Repository' : 'Edit Repository'}
-        </h1>
-        <p className="text-gray-600 mt-2">
-          {isNewRepository 
-            ? 'Create a new repository to organize your documents. A silo will be automatically created for vector search.' 
-            : 'Update repository settings and configuration'
-          }
-        </p>
-      </div>
+
+      <Title variant="titPrincipal"
+        titulo={isNewRepository ? t('repositoryFormPage.title.create') : t('repositoryFormPage.title.edit')}
+        subtitulo={isNewRepository 
+          ? t('repositoryFormPage.subtitle.create')
+          : t('repositoryFormPage.subtitle.edit')
+        } 
+      />
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          {error}
-        </div>
+        <Alert type="error" message={error} />
       )}
 
       {/* Form */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6 max-w-2xl">
+      <div className="max-w-2xl">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Repository Name */}
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-              Repository Name
-            </label>
-            <input
-              type="text"
-              id="name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter repository name"
-              required
-            />
-            <p className="text-sm text-gray-500 mt-1">
-              Choose a descriptive name for your repository
-            </p>
-          </div>
+          <FormField
+            label={t('repositoryFormPage.fields.name')}
+            id="name"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            placeholder={t('repositoryFormPage.fields.namePlaceholder')}
+            required
+            helpText={t('repositoryFormPage.help.name')}
+          />
 
           {/* Vector Database */}
-          <div>
-            <label htmlFor="vector_db_type" className="block text-sm font-medium text-gray-700 mb-2">
-              Vector Database <span className="text-red-500">*</span>
-            </label>
-            <select
-              id="vector_db_type"
-              value={formData.vector_db_type}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  vector_db_type: e.target.value.toUpperCase(),
-                })
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-              required={isNewRepository}
-              disabled={!isNewRepository}
-            >
-              {vectorDbOptions.length === 0
-                ? (
-                  <option value={formData.vector_db_type}>{formData.vector_db_type}</option>
-                ) : (
-                  vectorDbOptions.map((option) => (
-                    <option key={option.code} value={option.code}>
-                      {option.label}
-                    </option>
-                  ))
-                )}
-            </select>
-            {isNewRepository ? (
-              <p className="text-sm text-gray-500 mt-1">
-                Select where embeddings for this repository will be stored.
-              </p>
-            ) : (
-              <p className="text-sm text-amber-600 mt-1">
-                The vector database cannot be changed after a repository is created.
-              </p>
-            )}
-          </div>
+          <FormSelect
+            label={t('repositoryFormPage.fields.vectorDatabase')}
+            id="vector_db_type"
+            value={formData.vector_db_type}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                vector_db_type: e.target.value.toUpperCase(),
+              })
+            }
+            options={vectorDbOptions.length === 0
+              ? [{ value: formData.vector_db_type, label: formData.vector_db_type }]
+              : vectorDbOptions.map((option) => ({ value: option.code, label: option.label }))}
+            required={isNewRepository}
+            disabled={!isNewRepository}
+            className={!isNewRepository ? '[&>p]:text-accent dark:text-accent-dark' : ''}
+            helpText={isNewRepository
+              ? t('repositoryFormPage.help.vectorDatabase')
+              : t('repositoryFormPage.help.vectorDatabaseImmutable')}
+          />
 
           {/* Embedding Service (only for new repositories) */}
           {isNewRepository && (
             <div>
-              <label htmlFor="embedding_service_id" className="block text-sm font-medium text-gray-700 mb-2">
-                Embedding Service <span className="text-red-500">*</span>
-              </label>
-              <select
+              <FormSelect
+                label={t('repositoryFormPage.fields.embeddingService')}
                 id="embedding_service_id"
                 value={formData.embedding_service_id || ''}
                 onChange={(e) => setFormData({ 
                   ...formData, 
                   embedding_service_id: e.target.value ? Number.parseInt(e.target.value, 10) : undefined 
                 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
-                aria-describedby={serviceStatusId(embeddingServices, formData.embedding_service_id, 'embedding_service_id')}
-              >
-                <option value="">Select an embedding service</option>
-                <ServiceSelectOptions
-                  options={embeddingServices}
-                  savedValue={undefined}
-                  getLabel={(service) =>
-                    `${service.is_system ? '[System] ' : ''}${service.provider && service.model_name
-                      ? `${service.name} (${service.provider} - ${service.model_name})`
-                      : service.name}`}
-                />
-              </select>
+                options={[
+                  { value: '', label: t('repositoryFormPage.fields.selectEmbeddingService') },
+                  ...selectableServiceOptions(embeddingServices, undefined).map((service) => ({
+                    value: service.service_id,
+                    label: serviceOptionLabel(service, [
+                      service.is_system ? `[${t('siloFormPage.system')}]` : '',
+                      service.provider && service.model_name
+                        ? `${service.name} (${service.provider} - ${service.model_name})`
+                        : service.name,
+                    ].filter(Boolean).join(' ')),
+                  })),
+                ]}
+                ariaDescribedBy={serviceStatusId(embeddingServices, formData.embedding_service_id, 'embedding_service_id')}
+              />
               <ServiceOptionStatus selectId="embedding_service_id" options={embeddingServices} selectedId={formData.embedding_service_id} />
-              <p className="text-sm text-gray-500 mt-1">
-                This embedding service will be used for the silo that's automatically created with this repository
+              <p className="mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+                {t('repositoryFormPage.help.embeddingService')}
               </p>
             </div>
           )}
@@ -324,26 +316,27 @@ const RepositoryFormPage: React.FC = () => {
             onChange={(field, value) => setFormData({ ...formData, [field]: value ?? undefined })}
           />
 
+          {/* Chunking and PDF loader (stored on the repository's silo) */}
+          {indexing && indexingOptions && (
+            <CardApp className="space-y-4" titulo={t('siloFormPage.indexing.title')}>
+              <IndexingSettingsFields
+                scope="repository"
+                options={indexingOptions}
+                value={indexing}
+                onChange={setIndexing}
+                isEditing={!isNewRepository}
+                disabled={saving}
+              />
+            </CardApp>
+          )}
+
           {/* Action Buttons */}
-          <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {saving && (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              )}
-              {isNewRepository ? 'Create Repository' : 'Save Changes'}
-            </button>
-          </div>
+          <FormActions
+            onCancel={handleCancel}
+            isSubmitting={saving}
+            submitLabel={isNewRepository ? t('repositoryFormPage.actions.create') : t('repositoryFormPage.actions.saveChanges')}
+            containerClassName="pt-6"
+          />
         </form>
       </div>
     </div>

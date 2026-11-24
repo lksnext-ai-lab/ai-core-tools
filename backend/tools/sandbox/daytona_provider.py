@@ -807,6 +807,23 @@ class DaytonaProvider(SandboxProvider):
             return data.encode("utf-8")
         return bytes(data)
 
+    def read_file_limited(self, handle: SandboxHandle, filename: str, max_bytes: int) -> bytes:
+        """Stream the download and stop at ``max_bytes + 1`` bytes (the generator is closed, not drained)."""
+        sandbox = handle.metadata.get(_META_SANDBOX)
+        if sandbox is None:
+            raise SandboxExpiredError(
+                f"DaytonaProvider: no sandbox object for handle {handle.sandbox_id}"
+            )
+        self._reset_idle_timeout(sandbox)
+        try:
+            fs = _fs(sandbox)
+            if fs is None or not hasattr(fs, "download_file_stream"):
+                raise NotImplementedError("Daytona sandbox has no fs.download_file_stream service")
+            return self._collect_bounded(fs.download_file_stream(_workspace_path(filename), timeout=settings.SANDBOX_DEFAULT_TIMEOUT_S), max_bytes
+            )
+        finally:
+            self._reset_idle_timeout(sandbox, suppress_errors=True)
+
     def list_files(self, handle: SandboxHandle) -> list[str]:
         sandbox = handle.metadata.get(_META_SANDBOX)
         if sandbox is None:

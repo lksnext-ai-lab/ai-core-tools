@@ -6,6 +6,7 @@ from typing import Optional, Dict, Annotated
 
 from db.database import get_db
 from routers.internal.auth_utils import get_current_user_oauth
+from services.agent_service import AgentService
 from services.conversation_service import ConversationService
 from schemas.conversation_schemas import (
     ConversationUpdate,
@@ -18,6 +19,7 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 CONVERSATION_NOT_FOUND = "Conversation not found"
+AGENT_NOT_FOUND = "Agent not found"
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
@@ -45,6 +47,10 @@ async def create_conversation(
         agent_id: ID of the agent
         title: Optional title for the conversation
     """
+    # The hidden internal chat agent (and missing agents) are not found; kept outside the try so the
+    # 404 is not converted into a 500 by the generic handler.
+    if not AgentService().get_agent(db, agent_id):
+        raise HTTPException(status_code=404, detail=AGENT_NOT_FOUND)
     try:
         user_context = _auth_context_to_dict(current_user)
         
@@ -108,13 +114,13 @@ async def get_conversation(
         conversation_id: ID of the conversation
     """
     user_context = _auth_context_to_dict(current_user)
-    
+
     conversation = ConversationService.get_conversation(
         db=db,
         conversation_id=conversation_id,
         user_context=user_context
     )
-    
+
     if not conversation:
         raise HTTPException(status_code=404, detail=CONVERSATION_NOT_FOUND)
     return conversation
@@ -140,7 +146,7 @@ async def get_conversation_with_history(
         conversation_id=conversation_id,
         user_context=user_context
     )
-    
+
     if not conversation:
         raise HTTPException(status_code=404, detail=CONVERSATION_NOT_FOUND)
     # Get message history
@@ -181,7 +187,7 @@ async def update_conversation(
         update_data: Update data
     """
     user_context = _auth_context_to_dict(current_user)
-    
+
     conversation = ConversationService.update_conversation(
         db=db,
         conversation_id=conversation_id,
@@ -207,7 +213,7 @@ async def delete_conversation(
         conversation_id: ID of the conversation
     """
     user_context = _auth_context_to_dict(current_user)
-    
+
     success = await ConversationService.delete_conversation(
         db=db,
         conversation_id=conversation_id,

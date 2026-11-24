@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Code2, KeyRound, Check } from 'lucide-react';
+import { KeyRound, Check } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../../services/api';
+import SegmentedTabs from '../ui/SegmentedTabs';
+import { FormSelect } from '../ui/FormField';
 
 interface SiloAPISnippetsProps {
   appId: string | number;
@@ -21,6 +24,13 @@ interface APIKeyItem {
   key_preview: string;
 }
 
+const languageTabs = [
+  { id: 'curl', label: 'cURL' },
+  { id: 'python', label: 'Python' },
+  { id: 'js', label: 'JavaScript' },
+  { id: 'ts', label: 'TypeScript' },
+] as const;
+
 function SiloAPISnippets({
   appId,
   siloId,
@@ -33,6 +43,7 @@ function SiloAPISnippets({
   fetchK,
   lambdaMult,
 }: Readonly<SiloAPISnippetsProps>) {
+  const { t } = useTranslation('common');
   const [selectedTab, setSelectedTab] = useState<'curl' | 'python' | 'js' | 'ts'>('curl');
   const [copied, setCopied] = useState<string | null>(null);
   const [apiKeys, setApiKeys] = useState<APIKeyItem[]>([]);
@@ -109,80 +120,67 @@ function SiloAPISnippets({
   }
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
-      {/* Header with API key picker */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
-        <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-          <Code2 className="w-4 h-4" />
-          {siloName ? `${siloName} — ` : ''}Public API Snippet —{' '}
-          <span className="font-mono text-xs text-gray-500">{endpoint}</span>
-        </div>
+    <div className="space-y-3">
+      {/* Language pills + API key picker */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SegmentedTabs
+          tabs={languageTabs}
+          activeTab={selectedTab}
+          onChange={setSelectedTab}
+          ariaLabel={t('siloApiSnippets.language')}
+          className="max-w-[360px]"
+        />
         <div className="flex items-center gap-2">
-          <KeyRound className="w-4 h-4 text-gray-400" />
-          <select
+          <KeyRound className="h-4 w-4 text-fg-tertiary dark:text-fg-tertiary-dark" aria-hidden="true" />
+          <FormSelect
+            label={t('siloApiSnippets.apiKey')}
+            id="silo-api-key-select"
             value={selectedKeyId ?? ''}
             onChange={(e) => setSelectedKeyId(Number(e.target.value) || null)}
-            className="border border-gray-300 rounded px-2 py-1 text-xs text-gray-700 bg-white"
             disabled={loadingKeys || apiKeys.length === 0}
-          >
-            <option value="">
-              {loadingKeys ? 'Loading keys…' : ''}
-              {!loadingKeys && apiKeys.length === 0 ? 'No API keys' : ''}
-              {!loadingKeys && apiKeys.length > 0 ? '— select key —' : ''}
-            </option>
-            {apiKeys.map((k) => (
-              <option key={k.key_id} value={k.key_id}>
-                {k.name} ({k.key_preview})
-              </option>
-            ))}
-          </select>
+            className="relative min-w-[180px]"
+            labelClassName="sr-only"
+            options={[
+              {
+                value: '',
+                label: loadingKeys
+                  ? t('siloApiSnippets.loadingKeys')
+                  : apiKeys.length === 0
+                    ? t('siloApiSnippets.noApiKeys')
+                    : t('siloApiSnippets.selectKey'),
+              },
+              ...apiKeys.map((key) => ({
+                value: key.key_id,
+                label: `${key.name} (${key.key_preview})`,
+              })),
+            ]}
+          />
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200 bg-white">
-        {(['curl', 'python', 'js', 'ts'] as const).map((tab) => {
-          const tabLabels: Record<string, string> = {
-            curl: 'cURL',
-            python: 'Python',
-            js: 'JavaScript',
-            ts: 'TypeScript',
-          };
-          return (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setSelectedTab(tab)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                selectedTab === tab
-                  ? 'border-amber-500 text-amber-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {tabLabels[tab]}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Code block */}
-      <div className="relative">
-        <pre className="text-xs p-4 overflow-x-auto leading-relaxed max-h-72 bg-gray-900 text-green-300">
+      {/* Code block (dark in both themes) */}
+      <div className="overflow-hidden rounded-lg border border-[#33302a] bg-[#1c1b18] text-[#f2efe9]">
+        <div className="flex items-center justify-between gap-2.5 border-b border-[#33302a] py-2 pl-3.5 pr-2.5 text-[11.5px] text-[#b9b3a4]">
+          <span className="min-w-0 truncate font-mono" title={siloName ? `${siloName} — ${t('siloApiSnippets.publicApi')}` : undefined}>
+            POST {endpoint}
+          </span>
+          <button
+            type="button"
+            onClick={() => handleCopy(selectedTab)}
+            className="flex shrink-0 items-center gap-1 rounded-md border border-[#5a564b] px-[11px] py-[5px] text-xs text-[#f2efe9] hover:bg-[#2c2a24]"
+          >
+            {copied === selectedTab ? (
+              <>
+                <Check className="h-3 w-3" aria-hidden="true" /> {t('siloApiSnippets.copied')}
+              </>
+            ) : (
+              t('siloApiSnippets.copy')
+            )}
+          </button>
+        </div>
+        <pre className="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-all px-3.5 py-3 font-mono text-[13px] leading-relaxed">
           {snippets[selectedTab]}
         </pre>
-        <button
-          type="button"
-          onClick={() => handleCopy(selectedTab)}
-          className="absolute top-2 right-2 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded flex items-center gap-1"
-        >
-          {copied === selectedTab ? (
-            <>
-              <Check className="w-3 h-3" /> Copied
-            </>
-          ) : (
-            'Copy'
-          )}
-        </button>
       </div>
     </div>
   );

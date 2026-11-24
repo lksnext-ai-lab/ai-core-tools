@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface FrozenResourceBadgeProps {
   /** Whether the resource is currently frozen */
@@ -15,12 +16,14 @@ interface FrozenResourceBadgeProps {
  *   <FrozenResourceBadge isFrozen={agent.is_frozen} />
  */
 const FrozenResourceBadge: React.FC<FrozenResourceBadgeProps> = ({ isFrozen, className = '' }) => {
+  const { t } = useTranslation('common');
+
   if (!isFrozen) return null;
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 border border-gray-300 ${className}`}
-      title="This resource is frozen. Upgrade your plan or delete other resources to unfreeze it."
+      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium bg-tableCab dark:bg-tableCab-dark text-fg-tertiary dark:text-fg-tertiary-dark border border-line dark:border-line-dark ${className}`}
+      title={t('frozenResourceBadge.tooltip')}
     >
       {/* Lock icon (heroicons outline) */}
       <svg
@@ -38,7 +41,7 @@ const FrozenResourceBadge: React.FC<FrozenResourceBadgeProps> = ({ isFrozen, cla
           d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
         />
       </svg>
-      Frozen
+      {t('frozenResourceBadge.label')}
     </span>
   );
 };

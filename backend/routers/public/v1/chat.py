@@ -29,6 +29,7 @@ from services.agent_streaming_service import AgentStreamingService
 from models.hitl_approval import ApprovalChannel
 from tools.stream_guard import guard_agent_stream
 from services.conversation_service import ConversationService
+from services.chat_attachment_service import ChatAttachmentService
 from services.file_management_service import FileManagementService
 from routers.controls.rate_limit import apply_agent_rate_limit
 
@@ -143,6 +144,9 @@ async def call_agent(
 
         user_context = create_api_key_user_context(app_id, api_key, user_token=user_token)
 
+        ChatAttachmentService.require_owned_conversation(
+            db, conversation_id, user_context, agent_id, bool(agent.has_memory)
+        )
         all_file_references = await fms.resolve_chat_files(
             files=files,
             file_reference_ids=parsed_file_references,
@@ -248,6 +252,9 @@ async def call_agent_stream(
         user_context = create_api_key_user_context(app_id, api_key, user_token=user_token)
 
         fms = FileManagementService()
+        ChatAttachmentService.require_owned_conversation(
+            db, conversation_id, user_context, agent_id, bool(agent.has_memory)
+        )
         all_file_references = await fms.resolve_chat_files(
             files=files,
             file_reference_ids=parsed_file_references,

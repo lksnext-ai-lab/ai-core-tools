@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from db.database import get_db
+from models.repository import PLAYGROUND_MEDIA_REPO_TYPE
 from routers.controls.role_authorization import AppRole, require_min_role
 from services.repository_service import RepositoryService
 from utils.logger import get_logger
@@ -16,8 +17,9 @@ logger = get_logger(__name__)
 def validate_repository_app_ownership(repository_id: int, app_id: int, db: Session) -> None:
     """Raise HTTP 404 if the repository does not exist or does not belong to app_id."""
     repo = RepositoryService.get_repository(repository_id, db)
-    if not repo or repo.app_id != app_id:
-        if repo:
+    # The hidden temp repository of a playground / Chat conversation answers like a missing one.
+    if not repo or repo.app_id != app_id or repo.type == PLAYGROUND_MEDIA_REPO_TYPE:
+        if repo and repo.app_id != app_id:
             logger.warning(
                 f"Access violation: repository {repository_id} (app {repo.app_id}) accessed from app {app_id}"
             )

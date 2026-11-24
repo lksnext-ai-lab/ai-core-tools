@@ -1,5 +1,8 @@
 import { useId, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ChevronDown, SlidersHorizontal, X } from 'lucide-react';
 import SearchableMultiSelect from './SearchableMultiSelect';
+import { Badge } from '../ui/Badge';
 
 export interface ChatFilterField {
   field_name: string;
@@ -53,6 +56,7 @@ function OrchestratorFilterDropdowns({
   onSearchValues,
   disabled = false,
 }: Readonly<OrchestratorFilterDropdownsProps>) {
+  const { t } = useTranslation('common');
   const [isExpanded, setIsExpanded] = useState(false);
   const panelId = useId();
 
@@ -82,49 +86,27 @@ function OrchestratorFilterDropdowns({
   const handleClearAll = () => onChange({});
 
   return (
-    <div className="pg-glass rounded-xl">
+    <div className="rounded-md border border-line bg-surface dark:border-btCard-border-dark dark:bg-surface-dark">
       <button
         type="button"
-        className={`w-full px-4 py-3 flex items-center justify-between text-left hover:bg-white/30 dark:hover:bg-gray-700/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors ${
-          isExpanded ? 'rounded-t-xl' : 'rounded-xl'
+        className={`flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus dark:hover:bg-surface-hover-dark dark:focus-visible:ring-focus-dark ${
+          isExpanded ? 'rounded-t-md' : 'rounded-md'
         }`}
         onClick={() => setIsExpanded((prev) => !prev)}
         aria-expanded={isExpanded}
         aria-controls={panelId}
       >
-        <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-          <svg
-            className="w-4 h-4 text-indigo-500"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 12h12M3 6h18M9 18h6"
-            />
-          </svg>
-          Filters
-          {activeCount > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-indigo-500 text-white text-xs font-semibold">
-              {activeCount}
-            </span>
-          )}
+        <span className="flex items-center gap-2 text-sm font-medium text-fg dark:text-fg-dark">
+          <SlidersHorizontal className="h-4 w-4 text-fg-secondary dark:text-fg-secondary-dark" aria-hidden="true" />
+          {t('orchestratorFilters.title')}
+          {activeCount > 0 && <Badge variant="primary" label={String(activeCount)} />}
         </span>
-        <svg
-          className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+        <ChevronDown
+          className={`h-4 w-4 text-fg-tertiary transition-transform dark:text-fg-tertiary-dark ${
             isExpanded ? 'rotate-180' : ''
           }`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
           aria-hidden="true"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        />
       </button>
 
       {/* Active-filter chips stay visible even while collapsed — the conversation
@@ -135,9 +117,8 @@ function OrchestratorFilterDropdowns({
             values.map((value) => (
               <span
                 key={`${fieldName}\u0000${value}`}
-                className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full text-xs font-medium
-                           bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300
-                           border border-indigo-200 dark:border-indigo-500/30"
+                className="inline-flex items-center gap-1 rounded-full bg-bronze-bg-soft py-1 pl-2.5 pr-1 text-xs font-medium
+                           text-bronze-strong dark:bg-bronze-bg-soft-dark dark:text-bronze-strong-dark"
               >
                 <span className="opacity-70">{humanizeFieldName(fieldName)}:</span>
                 <span>{value}</span>
@@ -145,14 +126,12 @@ function OrchestratorFilterDropdowns({
                   type="button"
                   onClick={() => handleRemoveValue(fieldName, value)}
                   disabled={disabled}
-                  aria-label={`Remove ${value} from ${humanizeFieldName(fieldName)} filter`}
-                  className="ml-0.5 rounded-full p-0.5 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-100
-                             dark:text-indigo-400 dark:hover:text-indigo-200 dark:hover:bg-indigo-500/20
-                             disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  aria-label={t('orchestratorFilters.removeValue', { value, field: humanizeFieldName(fieldName) })}
+                  className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-surface-hover focus:outline-none
+                             focus-visible:ring-2 focus-visible:ring-focus dark:hover:bg-surface-hover-dark
+                             dark:focus-visible:ring-focus-dark disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <X className="h-3 w-3" aria-hidden="true" />
                 </button>
               </span>
             )),
@@ -162,10 +141,10 @@ function OrchestratorFilterDropdowns({
               type="button"
               onClick={handleClearAll}
               disabled={disabled}
-              className="text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200
-                         underline-offset-2 hover:underline disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="text-xs font-medium text-fg-secondary underline-offset-2 transition-colors hover:text-fg hover:underline
+                         disabled:cursor-not-allowed disabled:opacity-50 dark:text-fg-secondary-dark dark:hover:text-fg-dark"
             >
-              Clear all
+              {t('orchestratorFilters.clearAll')}
             </button>
           )}
         </div>
@@ -173,16 +152,14 @@ function OrchestratorFilterDropdowns({
 
       <div
         id={panelId}
-        className={`border-t border-white/20 dark:border-gray-700/30 px-4 py-3 bg-white/20 dark:bg-gray-800/20 rounded-b-xl ${
-          isExpanded ? '' : 'hidden'
-        }`}
+        className={`border-t border-line px-4 py-3 dark:border-line-dark ${isExpanded ? '' : 'hidden'}`}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filters.map((field) => (
             <div key={field.field_name}>
               <label
                 htmlFor={`${panelId}-${field.field_name}`}
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                className="mb-1 block text-sm font-medium text-fg dark:text-fg-dark"
               >
                 {humanizeFieldName(field.field_name)}
               </label>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { StepperContainer } from '../components/ui/Stepper';
 import type { StepDefinition } from '../components/ui/Stepper';
 import { TagInput } from '../components/ui/TagInput';
@@ -8,14 +8,12 @@ import Alert from '../components/ui/Alert';
 import { sharepointApi } from '../services/sharepoint';
 import { apiService } from '../services/api';
 import type { MicrosoftDrive } from '../types/sharepoint';
-import { ServiceOptionStatus, ServiceSelectOptions, serviceStatusId } from '../components/ui/ServiceOptionStatus';
-import type { ServiceOptionLike } from '../utils/serviceLifecycle';
-
-const WIZARD_STEPS: StepDefinition[] = [
-  { id: 'connect', label: 'Connect' },
-  { id: 'drive', label: 'Choose Drive' },
-  { id: 'indexing', label: 'Indexing' },
-];
+import { ButtonApp } from '../components/ui/ButtonApp';
+import { Spinner } from '../components/ui/Spinner';
+import Title from '../components/ui/Title';
+import { FormField, FormRadio, FormSelect, FormTextArea } from '../components/ui/FormField';
+import { ServiceOptionStatus, serviceStatusId } from '../components/ui/ServiceOptionStatus';
+import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../utils/serviceLifecycle';
 
 interface Credentials {
   tenant_id: string;
@@ -39,6 +37,12 @@ type EmbeddingService = ServiceOptionLike;
 function SharePointWizardPage() {
   const { appId } = useParams<{ appId: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation('common');
+  const wizardSteps: StepDefinition[] = [
+    { id: 'connect', label: t('sharePointWizardPage.steps.connect') },
+    { id: 'drive', label: t('sharePointWizardPage.steps.drive') },
+    { id: 'indexing', label: t('sharePointWizardPage.steps.indexing') },
+  ];
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -70,8 +74,8 @@ function SharePointWizardPage() {
 
   // Pre-fill silo name when name changes
   useEffect(() => {
-    if (name) setSiloName(`${name} Silo`);
-  }, [name]);
+    if (name) setSiloName(`${name} ${t('sharePointWizardPage.defaults.siloSuffix')}`);
+  }, [name, t]);
 
   // Load embedding services when reaching step 3
   useEffect(() => {
@@ -107,7 +111,7 @@ function SharePointWizardPage() {
       const ds = await sharepointApi.listDrives({ ...creds, site_id: site.id });
       setDrives(ds);
     } catch (err: any) {
-      setError(err?.message ?? 'Site not found. Check the URL and permissions.');
+      setError(err?.message ?? t('sharePointWizardPage.errors.siteNotFound'));
     } finally {
       setSiteResolving(false);
       setDrivesLoading(false);
@@ -121,19 +125,19 @@ function SharePointWizardPage() {
     if (step === 0) {
       // Validate and test connection
       if (!name.trim() || !creds.tenant_id || !creds.client_id || !creds.client_secret) {
-        setError('Please fill in all required fields.');
+        setError(t('sharePointWizardPage.errors.requiredFields'));
         return;
       }
       setTestingConnection(true);
       try {
         const result = await sharepointApi.testConnection(creds);
         if (!result.ok) {
-          setError(result.error ?? 'Connection test failed.');
+          setError(result.error ?? t('sharePointWizardPage.errors.connectionFailed'));
           return;
         }
         setStep(1);
       } catch (err: any) {
-        setError(err?.message ?? 'Connection test failed. Check your credentials.');
+        setError(err?.message ?? t('sharePointWizardPage.errors.connectionFailedCredentials'));
       } finally {
         setTestingConnection(false);
       }
@@ -142,7 +146,7 @@ function SharePointWizardPage() {
 
     if (step === 1) {
       if (!selectedSite || !selectedDrive) {
-        setError('Please select a site and a drive.');
+        setError(t('sharePointWizardPage.errors.siteAndDriveRequired'));
         return;
       }
       setStep(2);
@@ -152,7 +156,7 @@ function SharePointWizardPage() {
     if (step === 2) {
       // Submit
       if (!siloName.trim()) {
-        setError('Please provide a silo name.');
+        setError(t('sharePointWizardPage.errors.siloNameRequired'));
         return;
       }
       setSubmitting(true);
@@ -173,7 +177,7 @@ function SharePointWizardPage() {
         });
         navigate(`/apps/${appId}/sharepoint`);
       } catch (err: any) {
-        setError(err?.message ?? 'Failed to create SharePoint source.');
+        setError(err?.message ?? t('sharePointWizardPage.errors.createFailed'));
       } finally {
         setSubmitting(false);
       }
@@ -188,105 +192,88 @@ function SharePointWizardPage() {
   const nextLabel =
     step === 0
       ? testingConnection
-        ? 'Testing...'
-        : 'Test & Next'
+        ? t('sharePointWizardPage.actions.testing')
+        : t('sharePointWizardPage.actions.testAndNext')
       : step === 2
         ? submitting
-          ? 'Creating...'
-          : 'Create'
-        : 'Next';
+          ? t('sharePointWizardPage.actions.creating')
+          : t('sharePointWizardPage.actions.create')
+        : t('sharePointWizardPage.actions.next');
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Add SharePoint Source</h1>
-        <p className="text-gray-600">Connect a Microsoft SharePoint drive to index its documents.</p>
-      </div>
+    <div className="mx-auto max-w-4xl space-y-6">
+      <Title
+        variant="titPrincipal"
+        titulo={t('sharePointWizardPage.title')}
+        subtitulo={t('sharePointWizardPage.subtitle')}
+      />
 
       {error && (
         <Alert
           type="error"
-          title="Error"
+          title={t('sharePointWizardPage.errors.title')}
           message={error}
           onDismiss={() => setError(null)}
           className="mb-4"
         />
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 min-h-[420px] flex flex-col">
+      <div className="min-h-[420px] flex flex-col">
         <StepperContainer
-          steps={WIZARD_STEPS}
+          steps={wizardSteps}
           currentStep={step}
           onNext={() => { void handleNext(); }}
           onBack={handleBack}
           onCancel={() => navigate(`/apps/${appId}/sharepoint`)}
           nextLabel={nextLabel}
+          backLabel={t('sharePointWizardPage.actions.back')}
+          cancelLabel={t('sharePointWizardPage.actions.cancel')}
+          submittingLabel={t('sharePointWizardPage.actions.importing')}
           nextDisabled={testingConnection || submitting}
           isSubmitting={testingConnection || submitting}
         >
           {/* -------- Step 1: Credentials -------- */}
           {step === 0 && (
             <div className="space-y-4 py-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Source Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="My SharePoint Source"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={2}
-                  placeholder="Optional description"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              <FormField
+                label={t('sharePointWizardPage.fields.sourceName')}
+                id="source-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t('sharePointWizardPage.placeholders.sourceName')}
+              />
+              <FormTextArea
+                label={t('sharePointWizardPage.fields.description')}
+                id="source-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+                placeholder={t('sharePointWizardPage.placeholders.description')}
+              />
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tenant ID <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={creds.tenant_id}
-                    onChange={(e) => setCreds({ ...creds, tenant_id: e.target.value })}
-                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Client ID <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={creds.client_id}
-                    onChange={(e) => setCreds({ ...creds, client_id: e.target.value })}
-                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Client Secret <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  value={creds.client_secret}
-                  onChange={(e) => setCreds({ ...creds, client_secret: e.target.value })}
-                  placeholder="Your Azure app client secret"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <FormField
+                  label={t('sharePointWizardPage.fields.tenantId')}
+                  id="tenant-id"
+                  value={creds.tenant_id}
+                  onChange={(e) => setCreds({ ...creds, tenant_id: e.target.value })}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                />
+                <FormField
+                  label={t('sharePointWizardPage.fields.clientId')}
+                  id="client-id"
+                  value={creds.client_id}
+                  onChange={(e) => setCreds({ ...creds, client_id: e.target.value })}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                 />
               </div>
+              <FormField
+                label={t('sharePointWizardPage.fields.clientSecret')}
+                id="client-secret"
+                type="password"
+                value={creds.client_secret}
+                onChange={(e) => setCreds({ ...creds, client_secret: e.target.value })}
+                placeholder={t('sharePointWizardPage.placeholders.clientSecret')}
+              />
             </div>
           )}
 
@@ -294,74 +281,67 @@ function SharePointWizardPage() {
           {step === 1 && (
             <div className="space-y-4 py-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  SharePoint Site URL <span className="text-red-500">*</span>
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
+                <div className="flex items-end gap-2">
+                  <FormField
+                    label={t('sharePointWizardPage.fields.siteUrl')}
+                    id="sharepoint-site-url"
                     value={siteUrl}
                     onChange={(e) => { setSiteUrl(e.target.value); setSelectedSite(null); setDrives([]); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleResolveSite(); } }}
-                    placeholder="https://yourtenant.sharepoint.com/sites/Marketing"
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={t('sharePointWizardPage.placeholders.siteUrl')}
+                    className="flex-1"
+                    inputClassName="flex-1"
                   />
-                  <button
-                    type="button"
+                  <ButtonApp
+                    label={t('sharePointWizardPage.actions.load')}
                     onClick={() => { void handleResolveSite(); }}
-                    disabled={!siteUrl.trim() || siteResolving}
-                    className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                  >
-                    {siteResolving ? <RefreshCw className="w-3 h-3 animate-spin" /> : null}
-                    Load
-                  </button>
+                    disabled={!siteUrl.trim()}
+                    loading={siteResolving}
+                    size="control"
+                  />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Enter the URL of your SharePoint site, then click Load.
+                <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mt-1">
+                  {t('sharePointWizardPage.help.siteUrl')}
                 </p>
               </div>
 
               {selectedSite && (
-                <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm">
-                  <span className="font-medium text-green-800">{selectedSite.site_name}</span>
-                  <span className="block text-xs text-green-600 truncate">{selectedSite.site_url}</span>
-                </div>
+                <Alert
+                  type="success"
+                  title={selectedSite.site_name}
+                  message={<span className="block truncate">{selectedSite.site_url}</span>}
+                />
               )}
 
               {selectedSite && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Drive <span className="text-red-500">*</span>
+                  <label className="block text-sm font-medium text-fg dark:text-fg-dark mb-1">
+                    {t('sharePointWizardPage.fields.drive')} <span className="text-error dark:text-error-dark">*</span>
                   </label>
                   {drivesLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <RefreshCw className="w-4 h-4 animate-spin" /> Loading drives...
+                    <div className="flex items-center gap-2 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
+                      <Spinner size="sm" tone="muted" /> {t('sharePointWizardPage.states.loadingDrives')}
                     </div>
                   ) : drives.length === 0 ? (
-                    <p className="text-sm text-gray-500">No drives found for this site.</p>
+                    <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('sharePointWizardPage.states.noDrives')}</p>
                   ) : (
-                    <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
+                    <div className="border border-line dark:border-line-dark rounded-md divide-y divide-line dark:divide-line-dark">
                       {drives.map((drive) => (
-                        <label key={drive.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${
-                          selectedDrive?.drive_id === drive.id ? 'bg-blue-50' : 'hover:bg-gray-50'
+                        <div key={drive.id} className={`flex items-center gap-3 px-3 py-2 transition-colors ${
+                          selectedDrive?.drive_id === drive.id
+                            ? 'bg-surface-tint dark:bg-surface-tint-dark'
+                            : 'hover:bg-surface-tint dark:hover:bg-surface-tint-dark'
                         }`}>
-                          <input
-                            type="radio"
-                            name="drive"
-                            value={drive.id}
+                          <FormRadio
+                            label={drive.name}
                             checked={selectedDrive?.drive_id === drive.id}
-                            onChange={() =>
-                              setSelectedDrive({ drive_id: drive.id, drive_name: drive.name })
-                            }
-                            className="text-blue-600"
+                            onChange={() => setSelectedDrive({ drive_id: drive.id, drive_name: drive.name })}
+                            className="flex items-center gap-3 cursor-pointer text-sm"
                           />
-                          <span className="text-sm text-gray-800">
-                            {drive.name}
-                            {drive.drive_type && (
-                              <span className="ml-1 text-xs text-gray-400">({drive.drive_type})</span>
-                            )}
-                          </span>
-                        </label>
+                          {drive.drive_type && (
+                            <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">({drive.drive_type})</span>
+                          )}
+                        </div>
                       ))}
                     </div>
                   )}
@@ -374,36 +354,34 @@ function SharePointWizardPage() {
           {step === 2 && (
             <div className="space-y-4 py-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Silo Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
+                <FormField
+                  label={t('sharePointWizardPage.fields.siloName')}
+                  id="silo-name"
                   value={siloName}
                   onChange={(e) => setSiloName(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  A new silo will be created to store the indexed documents.
+                <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mt-1">
+                  {t('sharePointWizardPage.help.siloName')}
                 </p>
               </div>
 
               <div>
-                <label htmlFor="sharepoint-embedding-service" className="block text-sm font-medium text-gray-700 mb-1">
-                  Embedding Service
-                </label>
-                <select
+                <FormSelect
+                  label={t('sharePointWizardPage.fields.embeddingService')}
                   id="sharepoint-embedding-service"
                   value={embeddingServiceId ?? ''}
-                  aria-describedby={serviceStatusId(embeddingServices, embeddingServiceId, 'sharepoint-embedding-service')}
                   onChange={(e) =>
                     setEmbeddingServiceId(e.target.value ? Number(e.target.value) : undefined)
                   }
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">— Use default —</option>
-                  <ServiceSelectOptions options={embeddingServices} savedValue={undefined} />
-                </select>
+                  options={[
+                    { value: '', label: t('sharePointWizardPage.options.defaultEmbedding') },
+                    ...selectableServiceOptions(embeddingServices, undefined).map((service) => ({
+                      value: service.service_id,
+                      label: serviceOptionLabel(service),
+                    })),
+                  ]}
+                  ariaDescribedBy={serviceStatusId(embeddingServices, embeddingServiceId, 'sharepoint-embedding-service')}
+                />
                 <ServiceOptionStatus
                   options={embeddingServices}
                   selectedId={embeddingServiceId}
@@ -411,32 +389,29 @@ function SharePointWizardPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vector Database
-                </label>
-                <select
-                  value={vectorDbType}
-                  onChange={(e) => setVectorDbType(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="PGVECTOR">PGVector (PostgreSQL)</option>
-                  <option value="QDRANT">Qdrant</option>
-                </select>
-              </div>
+              <FormSelect
+                label={t('sharePointWizardPage.fields.vectorDatabase')}
+                id="vector-database"
+                value={vectorDbType}
+                onChange={(e) => setVectorDbType(e.target.value)}
+                options={[
+                  { value: 'PGVECTOR', label: t('sharePointWizardPage.options.pgvector') },
+                  { value: 'QDRANT', label: t('sharePointWizardPage.options.qdrant') },
+                ]}
+              />
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  File Extension Filters
+                <label className="block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark mb-1">
+                  {t('sharePointWizardPage.fields.fileExtensionFilters')}
                 </label>
                 <TagInput
                   tags={fileExtensions}
                   onChange={setFileExtensions}
                   maxTags={20}
-                  placeholder="e.g. pdf, docx — press Enter to add"
+                  placeholder={t('sharePointWizardPage.placeholders.fileExtensions')}
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Leave empty to index all supported file types.
+                <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">
+                  {t('sharePointWizardPage.help.fileExtensions')}
                 </p>
               </div>
             </div>

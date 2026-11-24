@@ -1,9 +1,13 @@
-import React from 'react';
+import { ButtonApp } from './ButtonApp';
+import { useTranslation } from 'react-i18next';
 
 interface FormActionsProps {
   onCancel: () => void;
   isSubmitting: boolean;
+  /** Picks a translated default submit label when no submitLabel is given. */
+  isEditing?: boolean;
   submitLabel?: string;
+  submittingLabel?: string;
   cancelLabel?: string;
   submitClassName?: string;
   cancelClassName?: string;
@@ -13,65 +17,54 @@ interface FormActionsProps {
 }
 
 /**
- * Reusable form action buttons (Cancel/Submit)
- * Provides consistent button styling and behavior across all forms
+ * Reusable form action buttons (Cancel/Submit) built on ButtonApp.
+ * Provides consistent button styling and behavior across all forms.
  */
 export function FormActions({
   onCancel,
   isSubmitting,
-  submitLabel = 'Save',
-  cancelLabel = 'Cancel',
+  isEditing,
+  submitLabel,
+  submittingLabel,
+  cancelLabel,
   submitClassName = '',
   cancelClassName = '',
   containerClassName = '',
   showCancel = true,
-  submitDisabled = false
+  submitDisabled = false,
 }: Readonly<FormActionsProps>) {
+  const { t } = useTranslation('common');
+  let defaultSubmitLabel = t('formActions.save');
+  if (isEditing === true) defaultSubmitLabel = t('formActions.update');
+  else if (isEditing === false) defaultSubmitLabel = t('formActions.create');
+  const finalSubmitLabel = submitLabel || defaultSubmitLabel;
+  const finalSubmittingLabel = submittingLabel ?? t('formActions.saving');
+  const finalCancelLabel = cancelLabel ?? t('formActions.cancel');
+
   return (
-    <div className={`flex justify-end space-x-3 pt-4 border-t border-gray-200 ${containerClassName}`}>
+    <div className={`flex items-center justify-end gap-3 pt-4 border-t border-line dark:border-line-dark ${containerClassName}`}>
       {showCancel && (
-        <button
+        <ButtonApp
+          label={finalCancelLabel}
           type="button"
           onClick={onCancel}
           disabled={isSubmitting}
-          className={`px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${cancelClassName}`}
-        >
-          {cancelLabel}
-        </button>
+          variant="secondary"
+          size="medium"
+          className={cancelClassName}
+        />
       )}
-      
-      <button
+      <ButtonApp
+        label={isSubmitting ? finalSubmittingLabel : finalSubmitLabel}
         type="submit"
-        disabled={isSubmitting || submitDisabled}
-        className={`px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center ${submitClassName}`}
-      >
-        {isSubmitting && (
-          <svg 
-            className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" 
-            xmlns="http://www.w3.org/2000/svg" 
-            fill="none" 
-            viewBox="0 0 24 24"
-          >
-            <circle 
-              className="opacity-25" 
-              cx="12" 
-              cy="12" 
-              r="10" 
-              stroke="currentColor" 
-              strokeWidth="4"
-            />
-            <path 
-              className="opacity-75" 
-              fill="currentColor" 
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            />
-          </svg>
-        )}
-        {isSubmitting ? 'Saving...' : submitLabel}
-      </button>
+        disabled={submitDisabled}
+        loading={isSubmitting}
+        variant="primary"
+        size="medium"
+        className={submitClassName}
+      />
     </div>
   );
 }
 
 export default FormActions;
-

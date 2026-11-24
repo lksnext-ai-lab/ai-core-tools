@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { apiService } from '../../services/api';
+import ButtonApp from '../ui/ButtonApp';
+import { FormField, FormSelect } from '../ui/FormField';
 
 export type MetadataOperator = '$eq' | '$ne' | '$gt' | '$gte' | '$lt' | '$lte' | '$in';
 export type SupportedDbType = 'PGVECTOR' | 'QDRANT';
@@ -32,6 +34,9 @@ interface SearchFiltersProps {
   appId?: string | number;
   siloId?: string | number;
   siloStorageKey?: string;
+  /** `inline` (default): label, operator and value on one row.
+   *  `stacked`: label above, operator + value below — for narrow side columns. */
+  layout?: 'inline' | 'stacked';
 }
 
 const DEFAULT_DB_TYPE: SupportedDbType = 'PGVECTOR';
@@ -58,14 +63,14 @@ const FILTER_OPERATOR_MAPPINGS: Record<SupportedDbType, Record<MetadataOperator,
   },
 };
 
-const OPERATOR_LABELS: Record<MetadataOperator, string> = {
+const OPERATOR_TRANSLATION_KEYS: Record<MetadataOperator, string> = {
   $eq: 'equals',
-  $ne: 'not equals',
-  $gt: 'greater than',
-  $gte: 'greater than or equal',
-  $lt: 'less than',
-  $lte: 'less than or equal',
-  $in: 'in (any of)',
+  $ne: 'notEquals',
+  $gt: 'greaterThan',
+  $gte: 'greaterThanOrEqual',
+  $lt: 'lessThan',
+  $lte: 'lessThanOrEqual',
+  $in: 'inAnyOf',
 };
 
 function normalizeDbType(dbType?: string): SupportedDbType {
@@ -224,7 +229,10 @@ export function SearchFilters({
   appId,
   siloId,
   siloStorageKey,
+  layout = 'inline',
 }: Readonly<SearchFiltersProps>) {
+  const { t } = useTranslation('common');
+  const isStacked = layout === 'stacked';
   const [metadataFilters, setMetadataFilters] = useState<Record<string, string>>({});
   const [filterOperators, setFilterOperators] = useState<Record<string, MetadataOperator>>({});
   const [logicalOperator, setLogicalOperator] = useState<'$and' | '$or'>('$and');
@@ -371,30 +379,29 @@ export function SearchFilters({
   }
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-gray-700">
-          <Search className="w-4 h-4 mr-2 inline-block" aria-hidden="true" />
-          Filter by Metadata
-        </h3>
-        <div className="flex items-center gap-2">
-          <label htmlFor="logicalOperator" className="text-sm text-gray-600">
-            Match:
-          </label>
-          <select
+    <div>
+      <div className={isStacked ? 'mb-3.5' : 'mb-3 flex items-center justify-end'}>
+        <div className={isStacked ? '' : 'flex items-center gap-2'}>
+          <FormSelect
+            label={t('searchFilters.match')}
+            labelClassName={isStacked
+              ? 'text-[12.5px] font-medium text-fg dark:text-fg-dark mb-0 whitespace-nowrap'
+              : 'text-[13px] text-fg-secondary dark:text-fg-secondary-dark mb-0 whitespace-nowrap'}
+            selectClassName={isStacked ? '!py-1.5 !text-[13px] min-w-0 flex-1' : '!py-1.5 !text-[13px]'}
             id="logicalOperator"
             value={logicalOperator}
             onChange={(e) => setLogicalOperator(e.target.value as '$and' | '$or')}
-            className="px-3 py-1 border border-gray-300 rounded-lg text-sm font-medium bg-white"
             disabled={disabled}
-          >
-            <option value="$and">ALL filters (AND)</option>
-            <option value="$or">ANY filter (OR)</option>
-          </select>
+            options={[
+              { value: '$and', label: t('searchFilters.allFilters') },
+              { value: '$or', label: t('searchFilters.anyFilter') },
+            ]}
+            className="flex items-center gap-2"
+          />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className={isStacked ? 'flex flex-col gap-3' : 'flex flex-col gap-2.5'}>
         {metadataFields.map((field) => {
           const allowedOps = getOperatorsForType(field.type);
           const rawOp = filterOperators[field.name] || '$eq';
@@ -405,29 +412,36 @@ export function SearchFilters({
 
           return (
             <div key={field.name} className="relative">
-              <label htmlFor={`filter_${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
+              <div className={isStacked ? 'flex flex-wrap items-center gap-x-1.5 gap-y-[5px]' : 'flex flex-wrap items-center gap-2.5'}>
+              <label
+                htmlFor={`filter_${field.name}`}
+                className={isStacked
+                  ? 'w-full flex-none text-[12.5px] font-medium text-fg dark:text-fg-dark'
+                  : 'w-[200px] flex-none text-[13px] font-medium text-fg dark:text-fg-dark'}
+              >
                 {field.name}
-                <span className="text-xs text-gray-500 ml-1">({field.type})</span>
+                <span className={`${isStacked ? 'ml-1.5 inline' : 'block'} font-mono text-[11px] font-normal text-fg-tertiary dark:text-fg-tertiary-dark`}>{field.type}</span>
               </label>
-              <div className="flex items-center gap-2">
-                <select
+                <FormSelect
+                  label={t('searchFilters.operatorFor', { field: field.name })}
+                  labelClassName="sr-only"
+                  id={`filter_operator_${field.name}`}
                   value={currentOp}
                   onChange={(e) => {
                     const newOp = e.target.value as MetadataOperator;
                     handleMetadataFilterChange(field.name, metadataFilters[field.name] || '', newOp);
                   }}
-                  className="px-2 py-1 border border-gray-300 rounded-lg text-sm shrink-0"
                   disabled={disabled}
-                >
-                  {allowedOps.map((op) => (
-                    <option key={op} value={op}>
-                      {OPERATOR_LABELS[op]}
-                    </option>
-                  ))}
-                </select>
-                <div className="relative w-full">
-                  <input
-                    type="text"
+                  options={allowedOps.map((op) => ({
+                    value: op,
+                    label: t(`searchFilters.operators.${OPERATOR_TRANSLATION_KEYS[op]}`),
+                  }))}
+                  className={isStacked ? 'w-[128px] shrink-0' : 'w-[150px] shrink-0'}
+                />
+                <div className={isStacked ? 'relative min-w-0 flex-1' : 'relative min-w-[140px] flex-1'}>
+                  <FormField
+                    label={field.name}
+                    labelClassName="hidden"
                     id={`filter_${field.name}`}
                     value={metadataFilters[field.name] || ''}
                     onChange={(e) => {
@@ -442,18 +456,20 @@ export function SearchFilters({
                     onFocus={() => {
                       if (fieldSuggestions.length > 0) setOpenSuggestionField(field.name);
                     }}
-                    placeholder={currentOp === '$in' ? 'value1, value2, value3' : `Filter by ${field.name}`}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent text-sm"
+                    placeholder={currentOp === '$in'
+                      ? t('searchFilters.multipleValuesPlaceholder')
+                      : t('searchFilters.filterByField', { field: field.name })}
+                    className="w-full"
                     disabled={disabled}
                   />
                   {showSuggestions && (
-                    <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-md max-h-40 overflow-y-auto">
+                    <div className="absolute z-10 mt-1 max-h-40 w-full overflow-y-auto rounded-lg border border-line bg-surface shadow-md dark:border-line-dark dark:bg-surface-dark">
                       {fieldSuggestions.map((s) => (
                         <button
                           key={s}
                           type="button"
                           onMouseDown={() => handleSuggestionClick(field.name, s)}
-                          className="w-full text-left px-3 py-1.5 text-sm cursor-pointer hover:bg-amber-50 hover:text-amber-800 block"
+                          className="block w-full cursor-pointer px-3 py-1.5 text-left text-sm text-fg hover:bg-surface-hover dark:text-fg-dark dark:hover:bg-surface-hover-dark"
                         >
                           {s}
                         </button>
@@ -463,7 +479,7 @@ export function SearchFilters({
                 </div>
               </div>
               {field.description && (
-                <p className="text-xs text-gray-500 mt-1">{field.description}</p>
+                <p className={`mt-1 text-xs text-fg-tertiary dark:text-fg-tertiary-dark ${isStacked ? '' : 'sm:pl-[210px]'}`}>{field.description}</p>
               )}
             </div>
           );
@@ -473,93 +489,97 @@ export function SearchFilters({
       {/* FR-3.5 — Live JSON preview */}
       {filterMetadata && (
         <details className="mt-3">
-          <summary className="text-xs text-gray-500 cursor-pointer select-none hover:text-gray-700">
-            Filter JSON preview
+          <summary className="cursor-pointer select-none text-xs text-fg-tertiary hover:text-fg-secondary dark:text-fg-tertiary-dark dark:hover:text-fg-secondary-dark">
+            {t('searchFilters.jsonPreview')}
           </summary>
-          <pre className="mt-1 text-xs bg-white border border-gray-200 rounded p-2 overflow-x-auto text-gray-700 leading-relaxed">
+          <pre className="mt-1 overflow-x-auto rounded-md border border-line bg-surface p-2 text-xs leading-relaxed text-fg-secondary dark:border-line-dark dark:bg-surface-dark dark:text-fg-secondary-dark">
             {JSON.stringify(filterMetadata, null, 2)}
           </pre>
         </details>
       )}
 
       {/* FR-3.6 — Saved filters */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className={isStacked
+        ? 'mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-3.5 empty:hidden dark:border-line-dark'
+        : 'mt-3 flex flex-wrap items-center gap-2'}
+      >
         {filterMetadata && !showSaveForm && (
-          <button
+          <ButtonApp
             type="button"
             onClick={() => setShowSaveForm(true)}
-            className="text-xs px-2 py-1 border border-amber-300 text-amber-700 rounded hover:bg-amber-50"
-          >
-            Save filter
-          </button>
+            label={t('searchFilters.saveFilter')}
+            variant="primary"
+            size="medium"
+          />
         )}
         {showSaveForm && (
           <div className="flex items-center gap-1">
-            <input
-              type="text"
+            <FormField
+              label={t('searchFilters.filterName')}
+              labelClassName="sr-only"
+              id="save-filter-name"
               value={saveFilterName}
               onChange={(e) => setSaveFilterName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleSaveFilter();
                 if (e.key === 'Escape') { setShowSaveForm(false); setSaveFilterName(''); }
               }}
-              placeholder="Filter name..."
-              className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
-              autoFocus
+              placeholder={t('searchFilters.filterNamePlaceholder')}
+              className="w-full"
             />
-            <button
+            <ButtonApp
               type="button"
               onClick={handleSaveFilter}
               disabled={!saveFilterName.trim()}
-              className="text-xs px-2 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-50"
-            >
-              Save
-            </button>
-            <button
+              label={t('save')}
+              variant="primary"
+              size="medium"
+            />
+            <ButtonApp
               type="button"
               onClick={() => { setShowSaveForm(false); setSaveFilterName(''); }}
-              className="text-xs text-gray-500 hover:text-gray-700 underline"
-            >
-              Cancel
-            </button>
+              label={t('cancel')}
+              variant="secondary"
+              size="medium"
+            />
           </div>
         )}
         {savedFilters.length > 0 && (
-          <select
+          <FormSelect
+            label={t('searchFilters.loadSavedFilter')}
+            labelClassName="sr-only"
+            id="load-saved-filter"
             value={loadSelectValue}
             onChange={handleLoadFilter}
-            className="text-xs px-2 py-1 border border-gray-300 rounded bg-white"
-          >
-            <option value="">Load saved filter…</option>
-            {savedFilters.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: '', label: t('searchFilters.loadSavedFilterOption') },
+              ...savedFilters.map((filter) => ({ value: filter.id, label: filter.name })),
+            ]}
+            className="min-w-[220px] flex-1"
+          />
         )}
       </div>
 
       {/* Load banner */}
       {loadedFilterName && (
-        <div className="mt-2 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+        <div className="mt-2 flex items-center gap-2 rounded-md border border-bronze-border bg-bronze-bg px-2 py-1 text-xs text-bronze dark:border-bronze-border-dark dark:bg-bronze-bg-dark dark:text-bronze-dark">
           <span>
-            Loaded: <strong>{loadedFilterName}</strong>
+            {t('searchFilters.loaded')}: <strong>{loadedFilterName}</strong>
           </span>
-          <button
+          <ButtonApp
             type="button"
             onClick={() => { onFilterMetadataChange(undefined); setLoadedFilterName(null); }}
-            className="underline hover:no-underline"
-          >
-            Clear
-          </button>
-          <button
+            label={t('searchFilters.clear')}
+            variant="secondary"
+            size="medium"
+          />
+          <ButtonApp
             type="button"
             onClick={handleRemoveLoadedFilter}
-            className="underline hover:no-underline text-red-500 hover:text-red-700"
-          >
-            Delete
-          </button>
+            label={t('delete')}
+            variant="danger"
+            size="medium"
+          />
         </div>
       )}
     </div>

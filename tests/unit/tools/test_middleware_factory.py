@@ -5,7 +5,12 @@ from langchain.agents.middleware import HumanInTheLoopMiddleware, SummarizationM
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
 from models.middleware import MiddlewareType
-from tools.middleware.factory import build_agent_middlewares, default_trigger_tokens, tools_needing_approval
+from tools.middleware.factory import (
+    SUMMARY_PROMPT_OVERHEAD_TOKENS,
+    build_agent_middlewares,
+    default_trigger_tokens,
+    tools_needing_approval,
+)
 
 
 def _llm(max_input_tokens=None):
@@ -49,7 +54,8 @@ class TestDefaultSummarization:
 
         assert middleware.trigger == ("tokens", 108_800)
         assert middleware.keep == ("messages", 20)
-        assert middleware.trim_tokens_to_summarize is None
+        # Bounded by the summary model's WINDOW minus the prompt overhead (never by the trigger).
+        assert middleware.trim_tokens_to_summarize == 128_000 - SUMMARY_PROMPT_OVERHEAD_TOKENS
 
     def test_agent_without_memory_gets_none(self):
         assert build_agent_middlewares(_agent(has_memory=False), _llm(128_000)) == []
@@ -69,7 +75,7 @@ class TestAttachedSummarization:
         middleware = _summarization(build_agent_middlewares(_agent(summarization_config=config), _llm(200_000)))
 
         assert middleware.trigger == ("tokens", 150_000)
-        assert middleware.trim_tokens_to_summarize is None
+        assert middleware.trim_tokens_to_summarize == 200_000 - SUMMARY_PROMPT_OVERHEAD_TOKENS
 
 
 class TestAgentUsedAsTool:
