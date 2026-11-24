@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Spinner } from '../ui/Spinner';
 
 interface InlineFileImageProps {
   fileId: string;
@@ -7,6 +9,7 @@ interface InlineFileImageProps {
 }
 
 const InlineFileImage: React.FC<InlineFileImageProps> = ({ fileId, filename, resolveUrl }) => {
+  const { t } = useTranslation('common');
   const [src, setSrc] = useState<string | null>(null);
   const [error, setError] = useState(false);
 
@@ -19,17 +22,18 @@ const InlineFileImage: React.FC<InlineFileImageProps> = ({ fileId, filename, res
   }, [fileId]);
 
   if (error) {
-    return <span className="text-red-500 text-sm italic">[Image unavailable: {filename}]</span>;
+    return (
+      <span className="text-error dark:text-error-dark text-sm italic">
+        {t('attachedFiles.imageUnavailable', { filename })}
+      </span>
+    );
   }
 
   if (!src) {
     return (
-      <span className="inline-flex items-center gap-1 text-sm text-gray-500 italic">
-        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-        </svg>
-        Loading {filename}…
+      <span className="inline-flex items-center gap-1 text-sm text-fg-tertiary dark:text-fg-tertiary-dark italic">
+        <Spinner size="sm" tone="muted" />
+        {t('attachedFiles.loadingImage', { filename })}
       </span>
     );
   }
@@ -39,19 +43,20 @@ const InlineFileImage: React.FC<InlineFileImageProps> = ({ fileId, filename, res
       <img
         src={src}
         alt={filename}
-        className="max-w-full rounded-lg border border-gray-200 shadow-sm"
+        className="max-w-full rounded-md border border-line dark:border-line-dark"
         style={{ maxHeight: '400px' }}
       />
       <span className="block mt-1">
         <a
           href={src}
           download={filename}
-          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+          className="text-sm text-bronze dark:text-bronze-dark inline-block"
         >
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
+          {' '}
           {filename}
         </a>
       </span>

@@ -1,6 +1,8 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../themes/ThemeContext';
 import type { ThemeConfig } from '../../core/types';
+import { FormSelect } from '../ui/FormField';
 
 interface ThemeSelectorProps {
   themes?: Record<string, ThemeConfig>;
@@ -13,6 +15,7 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
   className = "",
   showLabel = true
 }) => {
+  const { t } = useTranslation('common');
   const { theme, setTheme } = useTheme();
 
   const handleThemeChange = (themeName: string) => {
@@ -29,24 +32,18 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
   }
 
   return (
-    <div className={`flex items-center space-x-2 ${className}`}>
-      {showLabel && (
-        <label htmlFor="theme-selector" className="text-sm font-medium text-gray-700">
-          Theme:
-        </label>
-      )}
-      <select
+      <FormSelect
+        className={`flex items-center gap-2 ${className}`}
         id="theme-selector"
+        label={t('themeSelector.label')}
+        labelClassName={showLabel ? 'mb-0 text-sm font-medium text-fg dark:text-fg-dark' : 'sr-only'}
         value={theme.name}
         onChange={(e) => handleThemeChange(e.target.value)}
-        className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-      >
-        {availableThemes.map((themeName) => (
-          <option key={themeName} value={themeName}>
-            {themes[themeName].name || themeName}
-          </option>
-        ))}
-      </select>
-    </div>
+        options={availableThemes.map((themeName) => ({
+          value: themeName,
+          label: themes[themeName].name || themeName,
+        }))}
+        selectClassName="w-auto"
+      />
   );
 };

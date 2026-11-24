@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import openai
 import pytest
+from langchain_core.documents import Document
 
 from models.ai_service import AIService
 from models.embedding_service import EmbeddingService
@@ -40,7 +41,11 @@ def index_env():
     store = MagicMock()
     with patch.object(silo_service, "SessionLocal", return_value=session), \
             patch.object(silo_service, "_get_vector_store", return_value=store), \
-            patch.object(silo_service.SiloService, "extract_documents_from_file", return_value=["doc"]), \
+            patch.object(
+                silo_service.SiloService,
+                "extract_documents_from_file",
+                return_value=[Document(page_content="Resource content", metadata={})],
+            ), \
             patch.object(silo_service, "ServiceHealthService") as health:
         yield resource, store, health
 

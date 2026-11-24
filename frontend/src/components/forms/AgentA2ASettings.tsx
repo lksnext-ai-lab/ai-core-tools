@@ -1,7 +1,12 @@
 import { useCallback, useId, useRef, useState } from 'react';
-import { Copy, Info, Plus, Trash2 } from 'lucide-react';
+import { ArrowUpRight, Copy, Plus, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { TagInput } from '../ui/TagInput';
+import Alert from '../ui/Alert';
+import CardApp from '../ui/CardApp';
+import FormField, { FormRadio, FormTextArea } from '../ui/FormField';
+import ButtonApp from '../ui/ButtonApp';
 
 export type A2ACardVisibility = 'public' | 'api_key';
 
@@ -27,6 +32,11 @@ export interface AgentA2ASettingsProps {
   readonly fieldErrors?: AgentA2AFieldErrors;
 }
 
+interface CopyStatus {
+  readonly type: 'success' | 'error';
+  readonly message: string;
+}
+
 const MAX_NAME_LENGTH = 255;
 const MAX_DESCRIPTION_LENGTH = 1000;
 const MAX_SKILL_TAGS = 20;
@@ -50,41 +60,37 @@ function CopyableField({
   label,
   value,
   hint,
+  copyLabel,
   onCopy,
 }: {
   readonly id: string;
   readonly label: string;
   readonly value: string | null;
   readonly hint: string;
+  readonly copyLabel: string;
   readonly onCopy: (value: string, label: string) => void;
 }) {
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+      <label htmlFor={id} className="block text-sm font-medium text-fg dark:text-fg-dark mb-2">
         {label}
       </label>
+
       {value ? (
         <div className="flex items-center gap-2">
-          <input
+         <FormField
+            label={label}
             id={id}
-            type="text"
-            readOnly
+            disabled
             value={value}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={() => undefined}
+            className="flex-1"
           />
-          <button
-            type="button"
-            onClick={() => onCopy(value, label)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-          >
-            <Copy className="w-4 h-4" aria-hidden="true" />
-            Copy
-          </button>
+          <ButtonApp variant="secondary" label={copyLabel} type="button" onClick={() => onCopy(value, label)} icon={<Copy className="w-4 h-4" aria-hidden="true" />} />
         </div>
       ) : (
-        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-200">
-          {hint}
-        </p>
+        
+        <Alert type="warning" message={hint} className="mt-2" />
       )}
     </div>
   );
@@ -104,15 +110,14 @@ export function AgentA2ASettings({
   disabled,
   fieldErrors,
 }: AgentA2ASettingsProps) {
-  const [copyStatus, setCopyStatus] = useState('');
+  const { t } = useTranslation('common');
+  const [copyStatus, setCopyStatus] = useState<CopyStatus | null>(null);
   const enableId = useId();
   const enableHintId = useId();
   const enableErrorId = useId();
   const nameId = useId();
-  const nameCounterId = useId();
   const nameErrorId = useId();
   const descriptionId = useId();
-  const descriptionCounterId = useId();
   const descriptionErrorId = useId();
   const visibilityErrorId = useId();
   const skillTagsErrorId = useId();
@@ -128,9 +133,15 @@ export function AgentA2ASettings({
   const handleCopy = useCallback((text: string, label: string) => {
     navigator.clipboard
       .writeText(text)
-      .then(() => setCopyStatus(`${label} copied`))
-      .catch(() => setCopyStatus(`Could not copy ${label.toLowerCase()}`));
-  }, []);
+      .then(() => setCopyStatus({
+        type: 'success',
+        message: t('agentA2ASettings.copySucceeded', { label }),
+      }))
+      .catch(() => setCopyStatus({
+        type: 'error',
+        message: t('agentA2ASettings.copyFailed', { label }),
+      }));
+  }, [t]);
 
   const handleSkillTagsChange = useCallback(
     (tags: string[]) => {
@@ -189,110 +200,107 @@ export function AgentA2ASettings({
   const examplesError = fieldErrors?.a2a_examples;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 space-y-8">
-      {/* aria-live region announcing copy outcomes; always mounted so updates are caught */}
-      <p aria-live="polite" className="min-h-[1.25rem] text-sm text-green-700 dark:text-green-400">
-        {copyStatus}
-      </p>
+    <CardApp className="p-8 space-y-8">
+      {copyStatus && (
+        <Alert type={copyStatus.type} message={copyStatus.message} polite />
+      )}
 
       <div className="flex items-start gap-3">
-        <input
+        <FormField
           id={enableId}
           type="checkbox"
+          className="mt-1"
           checked={value.a2a_enabled}
           disabled={disabled}
-          aria-invalid={!!enableError}
-          aria-describedby={enableError ? `${enableHintId} ${enableErrorId}` : enableHintId}
+          ariaInvalid={!!enableError}
+          ariaDescribedBy={enableError ? `${enableHintId} ${enableErrorId}` : enableHintId}
           onChange={(e) => onChange({ a2a_enabled: e.target.checked })}
-          className="mt-1 w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-gray-700"
         />
         <div>
-          <label htmlFor={enableId} className="text-sm font-medium text-gray-900 dark:text-gray-100">
-            Expose this agent over the A2A protocol
+          <label htmlFor={enableId} className="text-sm font-medium text-fg dark:text-fg-dark">
+            {t('agentA2ASettings.exposeAgent')}
           </label>
-          <p id={enableHintId} className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            When enabled, external A2A clients can discover this agent's card and call it over JSON-RPC.
+          <p id={enableHintId} className="text-sm text-fg-secondary dark:text-fg-secondary-dark mt-1">
+            {t('agentA2ASettings.exposeAgentHelp')}
           </p>
           <FieldError id={enableErrorId} message={enableError} />
         </div>
-      </div>
+      </div> 
 
-      <fieldset disabled={disabled} aria-describedby={visibilityError ? visibilityErrorId : undefined}>
-        <legend className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Agent card visibility</legend>
+      
+      <fieldset
+        disabled={disabled}
+        aria-describedby={visibilityError ? visibilityErrorId : undefined}
+      >
+        <legend className="text-sm font-medium text-fg dark:text-fg-dark mb-2">
+          {t('agentA2ASettings.visibility')}
+        </legend>
+
         <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
-            <input
-              type="radio"
-              name="a2a_card_visibility"
-              value="public"
-              checked={value.a2a_card_visibility === 'public'}
-              onChange={() => onChange({ a2a_card_visibility: 'public' })}
-              className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-gray-700"
-            />
-            <span>Public card — anyone with the URL can read the agent card</span>
-          </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
-            <input
-              type="radio"
-              name="a2a_card_visibility"
-              value="api_key"
-              checked={value.a2a_card_visibility === 'api_key'}
-              onChange={() => onChange({ a2a_card_visibility: 'api_key' })}
-              className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-gray-700"
-            />
-            <span>API key required — the card is only served to callers with a valid X-API-KEY</span>
-          </label>
+          <FormRadio
+            id={`${visibilityErrorId}-public`}
+            name="a2a_card_visibility"
+            value="public"
+            label={t('agentA2ASettings.publicVisibility')}
+            checked={value.a2a_card_visibility === 'public'}
+            disabled={disabled}
+            onChange={() => onChange({ a2a_card_visibility: 'public' })}
+          />
+
+          <FormRadio
+            id={`${visibilityErrorId}-api-key`}
+            name="a2a_card_visibility"
+            value="api_key"
+            label={t('agentA2ASettings.apiKeyVisibility')}
+            checked={value.a2a_card_visibility === 'api_key'}
+            disabled={disabled}
+            onChange={() => onChange({ a2a_card_visibility: 'api_key' })}
+          />
         </div>
+
         <FieldError id={visibilityErrorId} message={visibilityError} />
       </fieldset>
 
+
       <div>
-        <label htmlFor={nameId} className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-          Name override
-        </label>
-        <input
+        <FormField
+          label={t('agentA2ASettings.nameOverride')}
           id={nameId}
           type="text"
           value={value.a2a_name_override ?? ''}
           disabled={disabled}
           maxLength={MAX_NAME_LENGTH}
-          aria-invalid={!!nameError}
-          aria-describedby={nameError ? `${nameCounterId} ${nameErrorId}` : nameCounterId}
+          helpText={t('agentA2ASettings.charactersCount', { count: (value.a2a_name_override ?? '').length, max: MAX_NAME_LENGTH })}
+          helpTextAriaLive="polite"
+          ariaInvalid={!!nameError}
+          ariaDescribedBy={nameError ? nameErrorId : undefined}
           onChange={(e) => onChange({ a2a_name_override: e.target.value || null })}
-          placeholder="Defaults to the agent's name"
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:cursor-not-allowed disabled:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:disabled:bg-gray-800"
+          placeholder={t('agentA2ASettings.namePlaceholder')}
         />
-        <p id={nameCounterId} aria-live="polite" className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {(value.a2a_name_override ?? '').length}/{MAX_NAME_LENGTH} characters
-        </p>
         <FieldError id={nameErrorId} message={nameError} />
       </div>
 
       <div>
-        <label htmlFor={descriptionId} className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-          Description override
-        </label>
-        <textarea
+        <FormTextArea
+          label={t('agentA2ASettings.descriptionOverride')}
           id={descriptionId}
           value={value.a2a_description_override ?? ''}
           disabled={disabled}
           maxLength={MAX_DESCRIPTION_LENGTH}
+          helpText={t('agentA2ASettings.charactersCount', { count: (value.a2a_description_override ?? '').length, max: MAX_DESCRIPTION_LENGTH })}
+          helpTextAriaLive="polite"
           rows={3}
-          aria-invalid={!!descriptionError}
-          aria-describedby={descriptionError ? `${descriptionCounterId} ${descriptionErrorId}` : descriptionCounterId}
+          ariaInvalid={!!descriptionError}
+          ariaDescribedBy={descriptionError ? descriptionErrorId : undefined}
           onChange={(e) => onChange({ a2a_description_override: e.target.value || null })}
-          placeholder="Defaults to the agent's description"
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:cursor-not-allowed disabled:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:disabled:bg-gray-800"
+          placeholder={t('agentA2ASettings.descriptionPlaceholder')}
         />
-        <p id={descriptionCounterId} aria-live="polite" className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {(value.a2a_description_override ?? '').length}/{MAX_DESCRIPTION_LENGTH} characters
-        </p>
         <FieldError id={descriptionErrorId} message={descriptionError} />
       </div>
 
       <div>
-        <label htmlFor="a2a-skill-tags" className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-          Skill tags
+        <label htmlFor="a2a-skill-tags" className="block text-sm font-medium text-fg dark:text-fg-dark mb-2">
+          {t('agentA2ASettings.skillTags')}
         </label>
         <TagInput
           id="a2a-skill-tags"
@@ -300,42 +308,38 @@ export function AgentA2ASettings({
           onChange={handleSkillTagsChange}
           maxTags={MAX_SKILL_TAGS}
           disabled={disabled}
-          placeholder="Type a tag and press Enter"
+          placeholder={t('agentA2ASettings.skillTagsPlaceholder')}
         />
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Each tag is capped at {MAX_SKILL_TAG_LENGTH} characters.</p>
+        <p className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark mt-1">{t('agentA2ASettings.skillTagLimit', { max: MAX_SKILL_TAG_LENGTH })}</p>
         <FieldError id={skillTagsErrorId} message={skillTagsError} />
       </div>
 
       <div>
-        <span className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">Example prompts</span>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-          Shown to A2A callers as example tasks this agent can handle. Up to {MAX_EXAMPLES}, {MAX_EXAMPLE_LENGTH} characters each.
+        <span className="block text-sm font-medium text-fg dark:text-fg-dark mb-3">{t('agentA2ASettings.examples')}</span>
+        <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark mb-3">
+          {t('agentA2ASettings.examplesHelp', { maxExamples: MAX_EXAMPLES, maxCharacters: MAX_EXAMPLE_LENGTH })}
         </p>
         <div className="space-y-3">
           {value.a2a_examples.map((example, idx) => (
             <div key={`${exampleKeyPrefix}-${idx}`} className="flex items-start gap-2">
               <div className="flex-1">
-                <textarea
+                <FormTextArea
                   ref={(el) => {
                     exampleTextareaRefs.current[idx] = el;
                   }}
+                  id={`${exampleKeyPrefix}-example-${idx}`}
+                  label={t('agentA2ASettings.exampleLabel', { number: idx + 1 })}
+                  labelClassName="sr-only"
+                  ariaLabel={t('agentA2ASettings.exampleLabel', { number: idx + 1 })}
                   value={example}
                   disabled={disabled}
                   maxLength={MAX_EXAMPLE_LENGTH}
+                  helpText={t('agentA2ASettings.charactersCount', { count: example.length, max: MAX_EXAMPLE_LENGTH })}
+                  helpTextAriaLive="polite"
                   rows={2}
                   onChange={(e) => updateExample(idx, e.target.value)}
-                  aria-label={`Example prompt ${idx + 1}`}
-                  aria-describedby={`${exampleKeyPrefix}-counter-${idx}`}
-                  placeholder="Enter an example prompt..."
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 transition-all disabled:cursor-not-allowed disabled:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:disabled:bg-gray-800"
+                  placeholder={t('agentA2ASettings.examplePlaceholder')}
                 />
-                <p
-                  id={`${exampleKeyPrefix}-counter-${idx}`}
-                  aria-live="polite"
-                  className="text-xs text-gray-400 dark:text-gray-500 mt-1"
-                >
-                  {example.length}/{MAX_EXAMPLE_LENGTH}
-                </p>
               </div>
               <button
                 type="button"
@@ -344,61 +348,67 @@ export function AgentA2ASettings({
                   exampleRemoveButtonRefs.current[idx] = el;
                 }}
                 onClick={() => removeExample(idx)}
-                aria-label={`Remove example prompt ${idx + 1}`}
+                aria-label={t('agentA2ASettings.removeExample', { number: idx + 1 })}
                 className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-900/30"
               >
                 <Trash2 className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
           ))}
-          <button
+          <ButtonApp
+            variant="secondary"
+            label={t('agentA2ASettings.addExample')}
             type="button"
             ref={addExampleButtonRef}
             disabled={disabled || value.a2a_examples.length >= MAX_EXAMPLES}
             onClick={addExample}
-            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
-          >
-            <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
-            Add example
-          </button>
+            icon={<Plus className="w-4 h-4" aria-hidden="true" />}
+          />
         </div>
         <FieldError id={examplesErrorId} message={examplesError} />
       </div>
 
-      <div className="space-y-4 border-t border-gray-200 dark:border-gray-700 pt-6">
+      <div className="space-y-4 border-t border-line dark:border-line-dark pt-6">
         <CopyableField
           id={cardUrlId}
-          label="Card URL"
+          label={t('agentA2ASettings.cardUrl')}
           value={cardUrl}
-          hint="This app has no slug yet — set one in App Settings to generate the agent card URL."
+          hint={t('agentA2ASettings.cardUrlMissingSlug')}
+          copyLabel={t('agentA2ASettings.copy')}
           onCopy={handleCopy}
         />
         {!cardUrl && (
-          <Link to={slugSettingsUrl} className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 inline-block">
-            Go to App Settings to set a slug
+          <Link to={slugSettingsUrl} className="text-sm text-bronze  dark:text-bronze-dark inline-block">
+            {t('agentA2ASettings.setSlugLink')}<ArrowUpRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
           </Link>
         )}
 
         <CopyableField
           id={rpcUrlId}
-          label="RPC URL"
+          label={t('agentA2ASettings.rpcUrl')}
           value={rpcUrl}
-          hint="This app has no slug yet — set one in App Settings to generate the RPC URL."
+          hint={t('agentA2ASettings.rpcUrlMissingSlug')}
+          copyLabel={t('agentA2ASettings.copy')}
           onCopy={handleCopy}
         />
       </div>
 
-      <div className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-3">
-        <Info className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
-        <p>
-          Callers must send an app API key in the <code>X-API-KEY</code> header. Create keys in the app's{' '}
-          <Link to={apiKeysSettingsUrl} className="text-blue-600 hover:text-blue-700 dark:text-blue-400 underline">
-            API Keys settings
-          </Link>
-          .
-        </p>
-      </div>
-    </div>
+      <Alert
+        type="info"
+        title={t('agentA2ASettings.apiKeyRequired')}
+        className="my-1"
+        message={(
+          <>
+            {t('agentA2ASettings.apiKeyInstructions')}{' '}
+            <Link to={apiKeysSettingsUrl} className="inline-block underline">
+              {t('agentA2ASettings.apiKeysSettings')}
+            </Link>.
+          </>
+        )}
+      />
+
+
+    </CardApp>
   );
 }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Search } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { LoadingState } from '../components/ui/LoadingState';
 import { ErrorState } from '../components/ui/ErrorState';
@@ -12,23 +12,30 @@ import type {
   MarketplaceAgentCard as MarketplaceAgentCardType,
   MarketplaceCatalogParams,
 } from '../types/marketplace';
+import Title from '../components/ui/Title';
+import ButtonApp from '../components/ui/ButtonApp';
+import { FormField, FormSelect } from '../components/ui/FormField';
+import { SidePanel } from '../components/ui/SidePanel';
+import { Tabs } from '../components/ui/Tabs';
+import MarketplaceAgentDetailPage from './MarketplaceAgentDetailPage';
+import { useTranslation } from 'react-i18next';
 
 const PAGE_SIZE = 12;
 
 type SortOption = 'relevance' | 'newest' | 'alphabetical';
 
-const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: 'relevance', label: 'Top Rated' },
-  { value: 'newest', label: 'Newest' },
-  { value: 'alphabetical', label: 'A–Z' },
-];
-
 type MarketplaceTab = 'agents' | 'tasks';
 
-const TABS: { value: MarketplaceTab; label: string }[] = [
-  { value: 'agents', label: 'Agents' },
-  { value: 'tasks', label: 'Scheduled tasks' },
-];
+const CATEGORY_LABEL_KEYS: Record<(typeof MARKETPLACE_CATEGORIES)[number], string> = {
+  Productivity: 'productivity',
+  Research: 'research',
+  Writing: 'writing',
+  Code: 'code',
+  'Data Analysis': 'dataAnalysis',
+  'Customer Support': 'customerSupport',
+  Education: 'education',
+  Other: 'other',
+};
 
 /**
  * Marketplace page — published agents (to chat with) and published scheduled tasks
@@ -36,37 +43,26 @@ const TABS: { value: MarketplaceTab; label: string }[] = [
  */
 export default function MarketplacePage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { t } = useTranslation('common');
   const tab: MarketplaceTab = searchParams.get('tab') === 'tasks' ? 'tasks' : 'agents';
+  const tabs: { id: MarketplaceTab; label: string }[] = [
+    { id: 'agents', label: t('marketplacePage.agentsTab') },
+    { id: 'tasks', label: t('marketplacePage.scheduledTasksTab') },
+  ];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Marketplace</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          {tab === 'agents'
-            ? 'Discover and chat with AI agents published across the platform.'
-            : 'Browse the results of scheduled tasks published across the platform.'}
-        </p>
-      </div>
-      <div role="tablist" aria-label="Marketplace sections" className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
-        {TABS.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.value}
-            onClick={() => setSearchParams(item.value === 'agents' ? {} : { tab: item.value })}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-              tab === item.value
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <div role="tabpanel">
+      <Title
+        titulo={t('marketplacePage.title')}
+        subtitulo={t('marketplacePage.subtitle')}
+        variant="titPrincipal"
+      />
+      <Tabs
+        tabs={tabs}
+        activeTab={tab}
+        onChange={(tabId) => setSearchParams(tabId === 'agents' ? {} : { tab: tabId })}
+      />
+      <div id={`${tab}-panel`} role="tabpanel" aria-labelledby={tab}>
         {tab === 'agents' ? <MarketplaceAgentsTab /> : <MarketplaceScheduledTasksTab />}
       </div>
     </div>
@@ -75,7 +71,9 @@ export default function MarketplacePage() {
 
 /** Catalog of published agents — browse, search, and filter. */
 function MarketplaceAgentsTab() {
-  const navigate = useNavigate();
+  const { t } = useTranslation('common');
+  // Agent shown in the right-hand detail panel (null = closed)
+  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
 
   // Filter / pagination state
   const [search, setSearch] = useState('');
@@ -91,6 +89,11 @@ function MarketplaceAgentsTab() {
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const sortOptions: { value: SortOption; label: string }[] = [
+    { value: 'relevance', label: t('marketplacePage.sortTopRated') },
+    { value: 'newest', label: t('marketplacePage.sortNewest') },
+    { value: 'alphabetical', label: t('marketplacePage.sortAlphabetical') },
+  ];
 
   // Debounce search input (300ms)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -130,24 +133,22 @@ function MarketplaceAgentsTab() {
       setTotal(data.total);
       setTotalPages(data.total_pages);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load marketplace');
+      setError(err instanceof Error ? err.message : t('marketplacePage.loadMarketplaceFailed'));
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, category, sortBy, myAppsOnly, page]);
+  }, [debouncedSearch, category, sortBy, myAppsOnly, page, t]);
 
   useEffect(() => {
     void fetchCatalog();
   }, [fetchCatalog]);
 
-  const handleAgentClick = useCallback(
-    (agentId: number) => navigate(`/marketplace/agents/${agentId}`),
-    [navigate],
-  );
+  const handleAgentClick = useCallback((agentId: number) => setSelectedAgentId(agentId), []);
+  const handleClosePanel = useCallback(() => setSelectedAgentId(null), []);
 
   function renderContent() {
     if (loading) {
-      return <LoadingState message="Loading marketplace..." />;
+      return <LoadingState message={t('marketplacePage.loadingMarketplace')} />;
     }
     if (error) {
       return <ErrorState error={error} onRetry={fetchCatalog} />;
@@ -157,10 +158,11 @@ function MarketplaceAgentsTab() {
     }
     return (
       <>
-        <p className="text-sm text-gray-500">
-          Showing {agents.length} of {total} agent{total === 1 ? '' : 's'}
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+          {t('marketplacePage.agentCount', { count: total, shown: agents.length })}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          
           {agents.map((agent) => (
             <MarketplaceAgentCard
               key={agent.agent_id}
@@ -182,61 +184,72 @@ function MarketplaceAgentsTab() {
       <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-center">
         {/* Search */}
         <div className="relative flex-1 min-w-[200px]">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400 pointer-events-none">
-            <Search className="w-4 h-4" />
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-fg-faint dark:text-fg-faint-dark pointer-events-none">
+            <Search className="w-4 h-4  text-fg-faint dark:text-fg-faint-dark" />
           </span>
-          <input
-            type="text"
+          <FormField
+            id="marketplace-agents-search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search agents..."
-            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder={t('marketplacePage.searchAgents')}
+            ariaLabel={t('marketplacePage.searchAgents')}
+            inputClassName="pl-10 pr-3"
           />
         </div>
 
         {/* Category */}
-        <select
+        <FormSelect
+          id="marketplace-category"
+          label={t('marketplacePage.category')}
+          labelClassName="sr-only"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="border border-gray-300 rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">All Categories</option>
-          {MARKETPLACE_CATEGORIES.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat}
-            </option>
-          ))}
-        </select>
+          options={[
+            { value: '', label: t('marketplacePage.allCategories') },
+            ...MARKETPLACE_CATEGORIES.map((cat) => ({
+              value: cat,
+              label: t(`marketplacePage.categories.${CATEGORY_LABEL_KEYS[cat]}`),
+            })),
+          ]}
+        />
 
         {/* Sort */}
-        <select
+        <FormSelect
+          id="marketplace-sort"
+          label={t('marketplacePage.sortBy')}
+          labelClassName="sr-only"
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as SortOption)}
-          className="border border-gray-300 rounded-lg text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {SORT_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+          options={sortOptions}
+        />
 
         {/* My Apps toggle */}
-        <button
-          type="button"
+        <ButtonApp
+          label={t('marketplacePage.myApps')}
+          variant="primary"
+          size="control"
+          ariaPressed={myAppsOnly}
           onClick={() => setMyAppsOnly((v) => !v)}
-          className={`text-sm py-2 px-4 rounded-lg border transition-colors ${
-            myAppsOnly
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          My Apps
-        </button>
+        />
       </div>
 
       {/* Content */}
       {renderContent()}
+
+      {/* Agent detail side panel — fixed wrapper that starts below the 56px (h-14) app header */}
+      {selectedAgentId !== null && (
+        <div className="fixed inset-x-0 bottom-0 top-14 z-10 !mt-0">
+          <SidePanel
+            open
+            side="right"
+            onClose={handleClosePanel}
+            title={t('marketplacePage.title')}
+            widthClassName="w-[640px] max-w-full"
+          >
+            <MarketplaceAgentDetailPage key={selectedAgentId} agentId={selectedAgentId} variant="panel" />
+          </SidePanel>
+        </div>
+      )}
     </div>
   );
 }
@@ -249,15 +262,16 @@ interface EmptyStateProps {
 }
 
 function EmptyState({ search, category }: EmptyStateProps) {
+  const { t } = useTranslation('common');
   const hasFilters = Boolean(search || category);
   return (
     <div className="text-center py-16">
-      <Search className="w-12 h-12 text-gray-300 mx-auto" aria-hidden="true" />
-      <h3 className="mt-4 text-lg font-medium text-gray-900">No agents found</h3>
-      <p className="mt-1 text-sm text-gray-500">
+      <Search className="w-12 h-12 text-fg-tertiary dark:text-fg-tertiary-dark mx-auto" aria-hidden="true"  />
+      <h3 className="mt-4 text-lg font-medium text-fg-primary dark:text-fg-primary-dark">{t('marketplacePage.noAgentsFound')}</h3>
+      <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">
         {hasFilters
-          ? 'Try adjusting your search or filters.'
-          : 'No agents have been published to the marketplace yet.'}
+          ? t('marketplacePage.adjustFilters')
+          : t('marketplacePage.noAgentsPublished')}
       </p>
     </div>
   );

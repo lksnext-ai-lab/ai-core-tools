@@ -169,17 +169,31 @@ search_params={"retrieval_count": 5}
 | `search_params` | JSON | No | RAG search parameters |
 | `conversation_id` | int | No | Continue existing conversation |
 
-**Response** (Server-Sent Events):
+**Response**: `/call` returns one JSON body (see [Response fields](#response-fields)); the streaming variant `/call/stream` returns Server-Sent Events, for example:
 
 ```
-data: {"type":"token","content":"To"}
-data: {"type":"token","content":" reset"}
-data: {"type":"token","content":" your"}
-data: {"type":"token","content":" password"}
-data: {"type":"token","content":","}
+data: {"type":"token","data":{"content":"To"}}
+data: {"type":"token","data":{"content":" reset"}}
+data: {"type":"token","data":{"content":" your"}}
 ...
-data: {"type":"done"}
+data: {"type":"done","data":{"response":"To reset your password, ...","conversation_id":42,"files":[],"status":"completed"}}
 ```
+
+Every event is `{"type": ..., "data": {...}}`. The `done` data carries `response`, `conversation_id`, `files` and `status` (`completed` or `requires_approval`), plus `outputs_skipped` when output files were skipped (see [Response fields](#response-fields)).
+
+#### Response fields
+
+`POST /{agent_id}/call` (`AgentResponseSchema`):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | `completed` or `requires_approval` |
+| `response` | string or object | The answer (an object when the agent has an output parser) |
+| `conversation_id` | int or null | Conversation of the turn |
+| `usage` | object or null | Turn metadata: `agent_name`, `agent_type`, `files_processed`, `has_memory` and, only when greater than 0, `outputs_skipped` |
+| `pending_approval` | object or null | Present when `status` is `requires_approval` |
+
+`usage.outputs_skipped` (integer) is the number of files the agent's code interpreter produced that could not be delivered, because of the output limits (20 files, 50 MB per file, 100 MB in total, a 20 s time budget; see [Environment Variables](../reference/environment-variables.md#sandbox-providers)) or an error while pulling them. It is omitted when no file was skipped. The answer text is never changed. On `/call/stream` the same count is sent as `outputs_skipped` in the data of the `done` event, again only when greater than 0.
 
 **File handling**:
 - New files uploaded with request are automatically persisted
@@ -208,7 +222,7 @@ curl -X POST "http://localhost:8000/public/v1/chat/10/call?app_id=1" \
 **Example response parsing (JavaScript)**:
 
 ```javascript
-const response = await fetch('/public/v1/chat/10/call?app_id=1', {
+const response = await fetch('/public/v1/chat/10/call/stream?app_id=1', {
   method: 'POST',
   headers: {
     'X-API-Key': 'mattin_...'
@@ -230,7 +244,7 @@ while (true) {
     if (line.startsWith('data: ')) {
       const data = JSON.parse(line.slice(6));
       if (data.type === 'token') {
-        console.log(data.content);
+        console.log(data.data.content);
       }
     }
   }

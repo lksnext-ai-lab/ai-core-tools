@@ -1,5 +1,6 @@
 """Unit tests: playground media ownership-before-retired, importer retired-service guards, domain options."""
 
+import contextlib
 import logging
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -94,6 +95,8 @@ class TestPlaygroundOwnershipBeforeRetired:
     def test_create_branch_foreign_retired_embedding_generic_error(self):
         db = MagicMock()
         with patch.object(PlaygroundMediaService, "get_temp_repository", return_value=None), patch(
+            "services.playground_media_service._temp_repo_creation_lock", lambda *a: contextlib.nullcontext()
+        ), patch.object(PlaygroundMediaService, "_session_is_live", return_value=True), patch(
             EMB_REPO, return_value=_svc(4, retired=True, app_id=99)
         ), patch("services.playground_media_service.RepositoryService.create_repository") as create:
             with pytest.raises(ValidationError) as exc:

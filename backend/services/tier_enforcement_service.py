@@ -3,7 +3,7 @@
 All methods are no-ops (return immediately) when running in self-managed mode.
 """
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import and_, func
 from fastapi import HTTPException, status
 
 from deployment_mode import is_self_managed
@@ -96,7 +96,15 @@ class TierEnforcementService:
             return
 
         model_cls, fk_col = model_info
-        current_count = db.query(func.count(model_cls.__mapper__.primary_key[0])).filter(fk_col == app_id).scalar() or 0
+        condition = fk_col == app_id
+        if resource_type == "agents":
+            # FR-13.2: the hidden internal chat agent never counts against the tenant's agent quota.
+            condition = and_(condition, Agent.visible_clause())
+        elif resource_type == "silos":
+            # The hidden temp silos of conversations (Chat / playground attachments) never count against the quota.
+            from repositories.silo_repository import SiloRepository
+            condition = and_(condition, SiloRepository.visible_clause())
+        current_count = db.query(func.count(model_cls.__mapper__.primary_key[0])).filter(condition).scalar() or 0
 
         if current_count >= limit:
             raise HTTPException(

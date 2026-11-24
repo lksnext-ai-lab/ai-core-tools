@@ -75,7 +75,7 @@ Select the **smallest test set that covers the changed files** — never the ful
   ```
   If the PR touches DB/integration paths and a test DB is available, also run the matching `tests/integration/` subset (`./scripts/test.sh -m integration` or the specific files). If no test DB, note it as a coverage gap.
 - **Alembic** (`alembic/versions/**`): verify the migration **round-trips** — `alembic upgrade head` then `alembic downgrade -1` then back up. A migration whose downgrade fails is an automatic `FAIL` (project rule: always test rollback).
-- **Frontend** (`frontend/src/**`): `cd frontend && npm run lint && npm run build:lib` — the library build must succeed. Run any component tests that exist for the touched files.
+- **Frontend** (`frontend/src/**`): `cd frontend && npm run lint && npm run build` — the build must succeed. Run any component tests that exist for the touched files.
 - **Docs/other only**: no tests; verify links/build if relevant, otherwise `PASS` on review alone.
 
 Run each selected set **on `origin/develop` first (baseline `B`)**, then **on `_verify/<N>` (result `P`)**, and compute **regressions = P − B**. Record exact commands and counts.

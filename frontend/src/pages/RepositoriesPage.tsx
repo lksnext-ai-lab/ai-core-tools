@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { AlertTriangle, FolderOpen, Gamepad2, Pencil, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { FolderOpen, Gamepad2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Table from '../components/ui/Table';
@@ -9,7 +10,12 @@ import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
+import Title from '../components/ui/Title';
+import Alert from '../components/ui/Alert';
+import ButtonApp from '../components/ui/ButtonApp';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import { LoadingState } from '../components/ui/LoadingState';
 import type { ServiceLifecycleWarning } from '../types/services';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 
@@ -27,6 +33,7 @@ const RepositoriesPage: React.FC = () => {
   const canEdit = hasMinRole(AppRole.EDITOR);
   const confirm = useConfirm();
   const mutate = useApiMutation();
+  const { t, i18n } = useTranslation('common');
 
   const navigate = useNavigate();
   const [repositories, setRepositories] = useState<Repository[]>([]);
@@ -47,7 +54,7 @@ const RepositoriesPage: React.FC = () => {
       setError(null);
     } catch (err) {
       console.error('Error loading repositories:', err);
-      setError('Failed to load repositories');
+      setError(t('repositoriesPage.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -67,19 +74,19 @@ const RepositoriesPage: React.FC = () => {
 
   const handleDeleteRepository = async (repository: Repository) => {
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('repository'),
-      message: `Are you sure you want to delete "${repository.name}"? This action cannot be undone and will remove all associated documents.`,
+      title: t('repositoriesPage.confirmDeleteTitle'),
+      message: t('repositoriesPage.confirmDeleteMessage', { name: repository.name }),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('repositoriesPage.actions.delete'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteRepository(Number.parseInt(appId!), repository.repository_id),
       {
-        loading: MESSAGES.DELETING('repository'),
-        success: MESSAGES.DELETED('repository'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('repository')),
+        loading: t('repositoriesPage.deleting'),
+        success: t('repositoriesPage.deleted'),
+        error: (err) => errorMessage(err, t('repositoriesPage.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -88,7 +95,7 @@ const RepositoriesPage: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString(i18n.resolvedLanguage);
   };
 
   if (loading) {
@@ -96,16 +103,10 @@ const RepositoriesPage: React.FC = () => {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Repositories</h1>
-            <p className="text-gray-600">Manage your document repositories</p>
-          </div>
+          <Title variant="titSecundario" titulo={t('repositoriesPage.title')} subtitulo={t('repositoriesPage.subtitle')} />
         </div>
 
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
-          <span className="ml-2">Loading repositories...</span>
-        </div>
+        <LoadingState variant="page" message={t('repositoriesPage.loading')} />
       </div>
     );
   }
@@ -115,27 +116,25 @@ const RepositoriesPage: React.FC = () => {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Repositories</h1>
-            <p className="text-gray-600">Manage your document repositories</p>
-          </div>
+          <Title variant="titSecundario" titulo={t('repositoriesPage.title')} subtitulo={t('repositoriesPage.subtitle')} />
         </div>
 
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error Loading Repositories</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-              <button 
+        <Alert
+          type="error"
+          title={t('repositoriesPage.loadErrorTitle')}
+          message={(
+            <>
+              {error}
+              <button
+                type="button"
                 onClick={() => loadRepositories()}
-                className="mt-2 text-sm text-red-800 hover:text-red-900 underline"
+                className="mt-2 block text-sm underline"
               >
-                Try again
+                {t('repositoriesPage.tryAgain')}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        />
       </div>
     );
   }
@@ -144,19 +143,15 @@ const RepositoriesPage: React.FC = () => {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Repositories</h1>
-          <p className="text-gray-600">Manage your document repositories</p>
-        </div>
+        <Title variant="titSecundario" titulo={t('repositoriesPage.title')} subtitulo={t('repositoriesPage.subtitle')} />
         {canEdit && (
-          <button
+          <ButtonApp
+            label={t('repositoriesPage.actions.create')}
             onClick={handleCreateRepository}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            {' '}
-            Create Repository
-          </button>
+            icon={<Plus className="w-4 h-4" aria-hidden="true" />}
+            variant="primary"
+            size="medium"
+          />
         )}
       </div>
 
@@ -165,23 +160,20 @@ const RepositoriesPage: React.FC = () => {
       {/* Repositories List */}
       <Table
         data={repositories}
+        stickyEdgeColumns
         keyExtractor={(repository) => repository.repository_id.toString()}
         columns={[
           {
-            header: 'Name',
+            header: t('repositoriesPage.columns.name'),
             render: (repository) => (
               <button 
                 type="button"
-                className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors w-full text-left"
+                className="flex items-center cursor-pointer  p-2 w-full text-left"
                 onClick={() => handleManageResources(repository.repository_id)}
               >
-                <div className="flex-shrink-0 h-10 w-10">
-                  <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
-                    <FolderOpen className="w-5 h-5 text-green-600" />
-                  </div>
-                </div>
+                <BackgroundImage icon={FolderOpen} size={34} iconSize={17} variant="marron" />
                 <div className="ml-4">
-                  <div className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors">
+                  <div className="text-sm font-medium text-fg dark:text-fg-dark transition-colors">
                     {repository.name}
                   </div>
                   <ServiceLifecycleAlert warnings={repository.lifecycle_warnings} variant="compact" className="mt-0.5" />
@@ -190,45 +182,46 @@ const RepositoriesPage: React.FC = () => {
             )
           },
           {
-            header: 'Documents',
-            render: (repository) => `${repository.resource_count} documents`,
-            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+            header: t('repositoriesPage.columns.documents'),
+            render: (repository) => t('repositoriesPage.documents', { count: repository.resource_count }),
+            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
-            header: 'Created',
+            header: t('repositoriesPage.columns.created'),
             render: (repository) => formatDate(repository.created_at),
-            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
-            header: 'Actions',
-            headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
-            className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium relative',
+            header: t('repositoriesPage.columns.actions'),
+            headerClassName: 'text-right tracking-wider',
+            sticky: 'right',
+            className: 'px-6 py-4 whitespace-nowrap text-right text-xs text-fg-secondary dark:text-fg-secondary-dark relative',
             render: (repository) => (
               <ActionDropdown
                 actions={[
                   ...(canEdit ? [
                     {
-                      label: 'Manage Resources',
+                      label: t('repositoriesPage.actions.manageResources'),
                       onClick: () => navigate(`/apps/${appId}/repositories/${repository.repository_id}/detail`),
                       icon: <FolderOpen className="w-4 h-4" />,
                       variant: 'success' as const
                     }
                   ] : []),
                   {
-                    label: 'Playground',
+                    label: t('repositoriesPage.actions.playground'),
                     onClick: () => navigate(`/apps/${appId}/repositories/${repository.repository_id}/playground`),
                     icon: <Gamepad2 className="w-4 h-4" />,
                     variant: 'warning'
                   },
                   ...(canEdit ? [
                     {
-                      label: 'Edit',
+                      label: t('repositoriesPage.actions.edit'),
                       onClick: () => handleEditRepository(repository.repository_id),
                       icon: <Pencil className="w-4 h-4" />,
                       variant: 'primary' as const
                     },
                     {
-                      label: 'Delete',
+                      label: t('repositoriesPage.actions.delete'),
                       onClick: () => { void handleDeleteRepository(repository); },
                       icon: <Trash2 className="w-4 h-4" />,
                       variant: 'danger' as const
@@ -240,20 +233,21 @@ const RepositoriesPage: React.FC = () => {
             )
           }
         ]}
-        emptyIcon={<FolderOpen className="w-10 h-10 text-gray-300" />}
-        emptyMessage="No Repositories Yet"
-        emptySubMessage="Create your first repository to start organizing and searching documents."
+        emptyIcon={<BackgroundImage icon={FolderOpen} size={64} iconSize={32} />}
+        emptyMessage={t('repositoriesPage.emptyTitle')}
+        emptySubMessage={t('repositoriesPage.emptyDescription')}
         loading={loading}
       />
 
+
       {!loading && repositories.length === 0 && canEdit && (
         <div className="text-center py-6">
-          <button
+          <ButtonApp
+            label={t('repositoriesPage.actions.createFirst')}
             onClick={handleCreateRepository}
-            className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg"
-          >
-            Create Your First Repository
-          </button>
+            variant="primary"
+            size="medium"
+          />
         </div>
       )}
     </div>

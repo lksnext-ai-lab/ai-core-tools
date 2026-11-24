@@ -8,100 +8,42 @@ import {
   Users,
   KeyRound,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import { ButtonLink } from '../components/ui/ButtonLink';
+import CardApp from '../components/ui/CardApp';
 import { useDeploymentMode } from '../contexts/DeploymentModeContext';
 import { useUser } from '../contexts/UserContext';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatLimit(n: number, unit: string): string {
-  if (n === -1) return `Unlimited ${unit}`;
-  return `${n} ${unit}`;
-}
-
-// ---------------------------------------------------------------------------
-// Feature card data
-// ---------------------------------------------------------------------------
-
-const FEATURES = [
-  {
-    icon: <Bot size={28} />,
-    title: 'Intelligent Agents',
-    description:
-      'Configure LLM agents with memory, system prompts, output parsers, and tool integrations.',
-  },
-  {
-    icon: <Database size={28} />,
-    title: 'Vector Knowledge Bases',
-    description:
-      'Silos with PGVector or Qdrant for RAG. Upload docs, crawl domains, query semantically.',
-  },
-  {
-    icon: <Plug size={28} />,
-    title: 'MCP Integration',
-    description:
-      'Connect agents to external tools via Model Context Protocol — Claude Desktop, Cursor, and more.',
-  },
-  {
-    icon: <Zap size={28} />,
-    title: 'Multi-Provider LLM',
-    description:
-      'OpenAI, Anthropic, Mistral, Azure, Google. Switch models without rewriting your agents.',
-  },
-  {
-    icon: <Users size={28} />,
-    title: 'Team Collaboration',
-    description:
-      'Invite collaborators with role-based access. Owners, administrators, editors, viewers.',
-  },
-  {
-    icon: <KeyRound size={28} />,
-    title: 'API & Marketplace',
-    description:
-      'Full REST API, public agent marketplace, and API key management for external access.',
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
 function Navbar({ isLoggedIn, onDashboard }: { isLoggedIn: boolean; onDashboard: () => void }) {
+  const { t } = useTranslation('common');
+
   return (
-    <nav className="sticky top-0 z-50 bg-white shadow-sm">
-      <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+    <nav className="sticky top-0 z-50 border-b border-line bg-surface dark:border-line-dark dark:bg-surface-dark">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-10">
         {/* Logo */}
         <div className="flex items-center gap-2">
-          <img src="/mattin-small.png" alt="Mattin AI logo" className="h-8 w-8 object-contain" />
-          <span className="text-lg font-bold text-slate-900">Mattin AI</span>
+          <img src="/mattin-small.png" alt={t('landingPage.logoAlt')} className="h-8 w-8 object-contain" />
+          <span className="font-display text-lg font-medium text-ink dark:text-ink-dark">Mattin AI</span>
         </div>
 
         {/* Nav actions */}
         <div className="flex items-center gap-3">
           {isLoggedIn ? (
-            <button
+            <ButtonApp
+              label={t('landingPage.goToDashboard')}
               onClick={onDashboard}
-              className="px-5 py-2 rounded-xl text-sm font-semibold text-white"
-              style={{ backgroundColor: 'var(--color-primary)' }}
-            >
-              Go to Dashboard
-            </button>
+              variant="primary"
+              size="medium"
+            />
           ) : (
             <>
-              <a
-                href="/login"
-                className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                Log in
-              </a>
-              <a
-                href="/register"
-                className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-colors"
-                style={{ backgroundColor: 'var(--color-primary)' }}
-              >
-                Get started free
-              </a>
+              <ButtonLink label={t('landingPage.logIn')} to="/login" variant="secondary" size="medium" />
+              <ButtonLink label={t('landingPage.getStartedFree')} to="/register" variant="primary" size="medium" />
             </>
           )}
         </div>
@@ -111,68 +53,47 @@ function Navbar({ isLoggedIn, onDashboard }: { isLoggedIn: boolean; onDashboard:
 }
 
 function HeroSection({ isLoggedIn, onDashboard }: { isLoggedIn: boolean; onDashboard: () => void }) {
-  return (
-    <section
-      className="relative overflow-hidden py-32 text-center"
-      style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)' }}
-    >
-      {/* Animated background orbs */}
-      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-        <div
-          className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full opacity-10 animate-pulse"
-          style={{ backgroundColor: 'var(--color-primary)', filter: 'blur(80px)' }}
-        />
-        <div
-          className="absolute bottom-1/4 right-1/4 w-64 h-64 rounded-full opacity-10 animate-pulse"
-          style={{ backgroundColor: '#38bdf8', filter: 'blur(60px)', animationDelay: '1s' }}
-        />
-      </div>
+  const { t } = useTranslation('common');
 
-      <div className="relative max-w-4xl mx-auto px-6">
+  return (
+    <section className="border-b border-line bg-canvas-alt py-16 dark:border-line-dark dark:bg-canvas-alt-dark sm:py-24">
+      <div className="mx-auto max-w-5xl px-4 text-center sm:px-6">
         {/* Badge */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-slate-600 text-slate-300 text-sm mb-8">
-          <span style={{ color: 'var(--color-primary)' }}>✦</span>
-          <span>AI Platform for Teams</span>
+        <div className="mb-6 inline-flex items-center gap-2 rounded-md border border-bronze-border bg-bronze-bg px-3 py-1.5 text-sm text-bronze dark:border-bronze-border-dark dark:bg-bronze-bg-dark dark:text-bronze-dark">
+          <span aria-hidden="true">✦</span>
+          <span>{t('landingPage.heroBadge')}</span>
         </div>
 
         {/* Headline */}
-        <h1 className="text-5xl sm:text-6xl font-bold text-white leading-tight mb-6">
-          Build Your AI Workforce.
+        <h1 className="font-display text-4xl font-medium leading-tight tracking-[-0.03em] text-ink dark:text-ink-dark sm:text-5xl">
+          {t('landingPage.heroHeadlineFirst')}
           <br />
-          Deploy in Minutes.
+          {t('landingPage.heroHeadlineSecond')}
         </h1>
 
         {/* Subheadline */}
-        <p className="text-xl text-slate-300 max-w-2xl mx-auto mb-10">
-          Mattin AI gives your team intelligent agents with RAG, vector search, and enterprise
-          integrations — all in one platform.
+        <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-fg-secondary dark:text-fg-secondary-dark sm:text-lg">
+          {t('landingPage.heroDescription')}
         </p>
 
         {/* CTAs */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           {isLoggedIn ? (
-            <button
+            <ButtonApp
+              label={`${t('landingPage.goToDashboard')} →`}
               onClick={onDashboard}
-              className="px-8 py-4 rounded-xl text-lg font-semibold text-white transition-opacity hover:opacity-90"
-              style={{ backgroundColor: 'var(--color-primary)' }}
-            >
-              Go to Dashboard →
-            </button>
+              variant="primary"
+              size="large"
+            />
           ) : (
             <>
-              <a
-                href="/register"
-                className="px-8 py-4 rounded-xl text-lg font-semibold text-white transition-opacity hover:opacity-90"
-                style={{ backgroundColor: 'var(--color-primary)' }}
-              >
-                Start for free →
-              </a>
-              <a
-                href="/login"
-                className="px-8 py-4 rounded-xl text-lg font-semibold text-white border border-white/40 hover:bg-white/10 transition-colors"
-              >
-                Sign in
-              </a>
+              <ButtonLink
+                label={`${t('landingPage.startForFree')} →`}
+                to="/register"
+                variant="primary"
+                size="large"
+              />
+              <ButtonLink label={t('landingPage.signIn')} to="/login" variant="secondary" size="large" />
             </>
           )}
         </div>
@@ -182,25 +103,60 @@ function HeroSection({ isLoggedIn, onDashboard }: { isLoggedIn: boolean; onDashb
 }
 
 function FeaturesSection() {
+  const { t } = useTranslation('common');
+  const features = [
+    {
+      icon: Bot,
+      title: t('landingPage.features.agentsTitle'),
+      description: t('landingPage.features.agentsDescription'),
+    },
+    {
+      icon: Database,
+      title: t('landingPage.features.knowledgeTitle'),
+      description: t('landingPage.features.knowledgeDescription'),
+    },
+    {
+      icon: Plug,
+      title: t('landingPage.features.mcpTitle'),
+      description: t('landingPage.features.mcpDescription'),
+    },
+    {
+      icon: Zap,
+      title: t('landingPage.features.llmTitle'),
+      description: t('landingPage.features.llmDescription'),
+    },
+    {
+      icon: Users,
+      title: t('landingPage.features.collaborationTitle'),
+      description: t('landingPage.features.collaborationDescription'),
+    },
+    {
+      icon: KeyRound,
+      title: t('landingPage.features.apiTitle'),
+      description: t('landingPage.features.apiDescription'),
+    },
+  ];
+
   return (
-    <section className="bg-white py-24">
-      <div className="max-w-6xl mx-auto px-6">
-        <h2 className="text-3xl font-bold text-slate-900 text-center mb-16">
-          Everything you need to build with AI
+    <section className="bg-canvas py-16 dark:bg-canvas-dark sm:py-20">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-10">
+        <h2 className="mb-10 text-center font-display text-3xl font-medium text-ink dark:text-ink-dark sm:mb-12">
+          {t('landingPage.features.title')}
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {FEATURES.map((feat) => (
-            <div
-              key={feat.title}
-              className="p-6 rounded-2xl shadow-sm hover:shadow-md transition-shadow bg-white border border-slate-100"
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {features.map((feature) => (
+            <CardApp
+              variant="canvas"
+              icon={feature.icon}
+              titulo={feature.title}
+              key={feature.title}
+              className="gap-2"
             >
-              <div className="mb-4" style={{ color: 'var(--color-primary)' }}>
-                {feat.icon}
-              </div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">{feat.title}</h3>
-              <p className="text-slate-500 text-sm leading-relaxed">{feat.description}</p>
-            </div>
+              <p className="text-sm leading-6 text-fg-secondary dark:text-fg-secondary-dark">
+                {feature.description}
+              </p>
+            </CardApp>
           ))}
         </div>
       </div>
@@ -236,60 +192,52 @@ function PricingCard({
   ctaHref,
   highlighted = false,
 }: PricingCardProps) {
+  const { t } = useTranslation('common');
+  const formatLimit = (
+    n: number,
+    unit: 'apps' | 'agents' | 'silos' | 'llmCalls' | 'collaborators' | 'servers',
+  ) => {
+    const unitLabel = t(`landingPage.units.${unit}`, { count: n === -1 ? 2 : n });
+    return n === -1
+      ? t('landingPage.unlimited', { unit: unitLabel })
+      : `${n} ${unitLabel}`;
+  };
   const limitRows = [
-    { label: 'Apps', value: formatLimit(limits.apps, 'apps') },
-    { label: 'Agents per app', value: formatLimit(limits.agents, 'agents') },
-    { label: 'Silos per app', value: formatLimit(limits.silos, 'silos') },
-    { label: 'LLM calls / month', value: formatLimit(limits.llm_calls, 'calls') },
-    { label: 'Collaborators', value: formatLimit(limits.collaborators, 'collaborators') },
-    { label: 'MCP Servers', value: formatLimit(limits.mcp_servers, 'servers') },
+    { label: t('landingPage.pricing.apps'), value: formatLimit(limits.apps, 'apps') },
+    { label: t('landingPage.pricing.agentsPerApp'), value: formatLimit(limits.agents, 'agents') },
+    { label: t('landingPage.pricing.silosPerApp'), value: formatLimit(limits.silos, 'silos') },
+    { label: t('landingPage.pricing.llmCallsPerMonth'), value: formatLimit(limits.llm_calls, 'llmCalls') },
+    { label: t('landingPage.pricing.collaborators'), value: formatLimit(limits.collaborators, 'collaborators') },
+    { label: t('landingPage.pricing.mcpServers'), value: formatLimit(limits.mcp_servers, 'servers') },
   ];
 
   return (
-    <div
-      className={`flex flex-col rounded-2xl p-8 ${
-        highlighted
-          ? 'bg-white shadow-xl border-2'
-          : 'bg-white shadow-sm border border-slate-200'
-      }`}
-      style={highlighted ? { borderColor: 'var(--color-primary)' } : undefined}
-    >
-      <div className="mb-6">
-        <h3 className="text-xl font-bold text-slate-900 mb-1">{name}</h3>
-        <p className="text-sm text-slate-500">{tagline}</p>
-        <p
-          className="mt-3 text-sm font-medium"
-          style={{ color: 'var(--color-primary)' }}
-        >
+    <CardApp variant={highlighted ? 'canvas' : 'white'} titulo={name} subtitulo={tagline} className="gap-5">
+      <div>
+        <p className="text-sm font-medium text-bronze dark:text-bronze-dark">
           {priceHint}
         </p>
       </div>
 
-      <ul className="flex-1 space-y-3 mb-6">
+      <ul className="flex-1 divide-y divide-line dark:divide-line-dark">
         {limitRows.map((row) => (
-          <li key={row.label} className="flex items-center justify-between text-sm">
-            <span className="text-slate-600">{row.label}</span>
-            <span className="font-medium text-slate-900">{row.value}</span>
+          <li key={row.label} className="flex items-center justify-between gap-3 py-3 text-sm">
+            <span className="text-fg-secondary dark:text-fg-secondary-dark">{row.label}</span>
+            <span className="text-right font-medium text-fg dark:text-fg-dark">{row.value}</span>
           </li>
         ))}
       </ul>
 
-      {note && (
-        <p className="text-xs text-slate-400 mb-4 italic">{note}</p>
-      )}
+      {note && <p className="text-xs leading-5 text-fg-tertiary dark:text-fg-tertiary-dark">{note}</p>}
 
-      <a
-        href={ctaHref}
-        className="block text-center py-3 rounded-xl font-semibold text-sm transition-opacity hover:opacity-90"
-        style={
-          highlighted
-            ? { backgroundColor: 'var(--color-primary)', color: '#fff' }
-            : { backgroundColor: '#f1f5f9', color: 'var(--color-primary)' }
-        }
-      >
-        {ctaLabel}
-      </a>
-    </div>
+      <ButtonLink
+        label={ctaLabel}
+        to={ctaHref}
+        variant={highlighted ? 'primary' : 'secondary'}
+        size="medium"
+        className="w-full"
+      />
+    </CardApp>
   );
 }
 
@@ -302,50 +250,46 @@ interface PricingSectionProps {
 }
 
 function PricingSection({ tiers }: PricingSectionProps) {
+  const { t } = useTranslation('common');
+
   return (
-    <section className="bg-slate-50 py-24">
-      <div className="max-w-5xl mx-auto px-6">
-        <h2 className="text-3xl font-bold text-slate-900 text-center mb-3">
-          Simple, transparent pricing
+    <section className="bg-canvas-alt py-16 dark:bg-canvas-alt-dark sm:py-20">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-10">
+        <h2 className="text-center font-display text-3xl font-medium text-ink dark:text-ink-dark">
+          {t('landingPage.pricing.title')}
         </h2>
-        <p className="text-center text-slate-500 mb-14">
-          Start free, upgrade when you are ready
+        <p className="mb-8 mt-2 text-center text-sm text-fg-secondary dark:text-fg-secondary-dark sm:mb-10">
+          {t('landingPage.pricing.subtitle')}
         </p>
 
-        <div className="flex flex-col md:flex-row gap-6 items-stretch">
-          <div className="flex-1">
-            <PricingCard
-              name="Free"
-              tagline="Get started at no cost"
-              priceHint="Free forever"
-              limits={tiers.free}
-              note="Use your own API keys for unlimited LLM usage"
-              ctaLabel="Get started free"
-              ctaHref="/register"
-            />
-          </div>
-          <div className="flex-1">
-            <PricingCard
-              name="Starter"
-              tagline="For growing teams"
-              priceHint="For growing teams"
-              limits={tiers.starter}
-              ctaLabel="Get started"
-              ctaHref="/register"
-              highlighted
-            />
-          </div>
-          <div className="flex-1">
-            <PricingCard
-              name="Pro"
-              tagline="For power users"
-              priceHint="For power users"
-              limits={tiers.pro}
-              note="Unlimited LLM calls via system AI services"
-              ctaLabel="Get started"
-              ctaHref="/register"
-            />
-          </div>
+        <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-3">
+          <PricingCard
+            name={t('landingPage.pricing.free')}
+            tagline={t('landingPage.pricing.freeTagline')}
+            priceHint={t('landingPage.pricing.freePriceHint')}
+            limits={tiers.free}
+            note={t('landingPage.pricing.freeNote')}
+            ctaLabel={t('landingPage.getStartedFree')}
+            ctaHref="/register"
+          />
+          <PricingCard
+            name={t('landingPage.pricing.starter')}
+            tagline={t('landingPage.pricing.starterTagline')}
+            priceHint={t('landingPage.pricing.starterPriceHint')}
+            limits={tiers.starter}
+            ctaLabel={t('landingPage.pricing.getStarted')}
+            ctaHref="/register"
+            highlighted
+          />
+          <PricingCard
+            name={t('landingPage.pricing.pro')}
+            tagline={t('landingPage.pricing.proTagline')}
+            priceHint={t('landingPage.pricing.proPriceHint')}
+            limits={tiers.pro}
+            note={t('landingPage.pricing.proNote')}
+            ctaLabel={t('landingPage.pricing.getStarted')}
+            ctaHref="/register"
+          />
         </div>
       </div>
     </section>
@@ -353,68 +297,70 @@ function PricingSection({ tiers }: PricingSectionProps) {
 }
 
 function CtaBanner() {
+  const { t } = useTranslation('common');
+
   return (
-    <section
-      className="py-20 text-center"
-      style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)' }}
-    >
-      <div className="max-w-3xl mx-auto px-6">
-        <h2 className="text-3xl font-bold text-white mb-4">
-          Ready to build your AI workforce?
-        </h2>
-        <p className="text-slate-300 mb-10 text-lg">
-          Join teams already using Mattin AI. Free to start, no credit card required.
-        </p>
-        <a
-          href="/register"
-          className="inline-block px-10 py-4 rounded-xl text-lg font-semibold bg-white transition-opacity hover:opacity-90"
-          style={{ color: 'var(--color-primary)' }}
-        >
-          Create your free account →
-        </a>
+    <section className="bg-canvas py-16 dark:bg-canvas-dark sm:py-20">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-10">
+        <CardApp variant="canvas" className="items-center gap-5 p-8 text-center sm:p-12">
+          <h2 className="font-display text-3xl font-medium text-ink dark:text-ink-dark">
+          {t('landingPage.ctaTitle')}
+          </h2>
+          <p className="max-w-2xl text-base leading-7 text-fg-secondary dark:text-fg-secondary-dark">
+            {t('landingPage.ctaDescription')}
+          </p>
+          <ButtonLink
+            label={`${t('landingPage.createFreeAccount')} →`}
+            to="/register"
+            variant="primary"
+            size="large"
+          />
+        </CardApp>
       </div>
     </section>
   );
 }
 
 function Footer() {
+  const { t } = useTranslation('common');
+
   return (
-    <footer className="bg-slate-900 py-12">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-8">
+    <footer className="border-t border-line bg-surface dark:border-line-dark dark:bg-surface-dark">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
+        <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
           {/* Brand */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <img
                 src="/mattin-small.png"
-                alt="Mattin AI logo"
+                alt={t('landingPage.logoAlt')}
                 className="h-7 w-7 object-contain"
               />
-              <span className="text-white font-bold text-base">Mattin AI</span>
+              <span className="font-display text-base font-medium text-ink dark:text-ink-dark">Mattin AI</span>
             </div>
-            <p className="text-slate-400 text-sm">
-              The extensible AI toolbox for modern teams.
+            <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+              {t('landingPage.footerTagline')}
             </p>
           </div>
 
           {/* Links */}
-          <div className="flex items-center gap-6 text-sm text-slate-400">
-            <a href="/login" className="hover:text-white transition-colors">
-              Log in
+          <div className="flex items-center gap-6 text-sm text-fg-secondary dark:text-fg-secondary-dark">
+            <a href="/login" className="transition-colors hover:text-accent dark:hover:text-accent-dark">
+              {t('landingPage.logIn')}
             </a>
             <a
               href="https://github.com/mattinai"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-white transition-colors"
+              className="transition-colors hover:text-accent dark:hover:text-accent-dark"
             >
-              Documentation
+              {t('landingPage.documentation')}
             </a>
           </div>
         </div>
 
-        <div className="mt-10 pt-6 border-t border-slate-800 text-center text-xs text-slate-500">
-          &copy; {new Date().getFullYear()} Mattin AI. All rights reserved.
+        <div className="mt-6 border-t border-line pt-5 text-center text-xs text-fg-tertiary dark:border-line-dark dark:text-fg-tertiary-dark">
+          {t('landingPage.copyright', { year: new Date().getFullYear() })}
         </div>
       </div>
     </footer>
@@ -449,7 +395,7 @@ const LandingPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col font-sans">
+    <div className="flex min-h-screen flex-col bg-canvas font-sans text-fg dark:bg-canvas-dark dark:text-fg-dark">
       <Navbar isLoggedIn={isLoggedIn} onDashboard={handleDashboard} />
 
       <main className="flex-1">

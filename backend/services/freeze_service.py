@@ -1,6 +1,6 @@
 """FreezeService: apply/remove is_frozen flags when a user's tier changes."""
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import and_, func
 
 from models.app import App
 from models.agent import Agent
@@ -8,6 +8,7 @@ from models.silo import Silo
 from models.skill import Skill
 from models.mcp_server import MCPServer
 from models.app_collaborator import AppCollaborator, CollaborationRole
+from repositories.silo_repository import SiloRepository
 from repositories.tier_config_repository import TierConfigRepository
 from repositories.subscription_repository import SubscriptionRepository
 from utils.logger import get_logger
@@ -62,7 +63,7 @@ class FreezeService:
         for app in apps:
             agents = (
                 db.query(Agent)
-                .filter(Agent.app_id == app.app_id)
+                .filter(and_(Agent.app_id == app.app_id, Agent.visible_clause()))
                 .order_by(Agent.create_date.desc())
                 .all()
             )
@@ -70,7 +71,7 @@ class FreezeService:
 
             silos = (
                 db.query(Silo)
-                .filter(Silo.app_id == app.app_id)
+                .filter(Silo.app_id == app.app_id, SiloRepository.visible_clause())  # temp silos: never frozen
                 .order_by(Silo.create_date.desc())
                 .all()
             )
@@ -141,12 +142,13 @@ class FreezeService:
             }
             model_cls = model_map.get(resource_type)
             if model_cls:
-                resources = (
-                    db.query(model_cls)
-                    .filter(model_cls.app_id == app_id)
-                    .order_by(model_cls.create_date.desc())
-                    .all()
-                )
+                condition = model_cls.app_id == app_id
+                if model_cls is Agent:
+                    # The hidden internal chat agent is never frozen (FR-13.2).
+                    condition = and_(condition, Agent.visible_clause())
+                elif model_cls is Silo:
+                    condition = and_(condition, SiloRepository.visible_clause())  # temp silos: never frozen
+                resources = db.query(model_cls).filter(condition).order_by(model_cls.create_date.desc()).all()
                 _freeze_resources(resources, limit)
 
         db.flush()

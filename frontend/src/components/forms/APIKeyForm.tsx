@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import { KeyRound } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useFormState } from '../../hooks/useFormState';
 import { FormField, FormCheckbox } from '../ui/FormField';
-import { FormError } from '../ui/FormError';
+import Alert from '../ui/Alert';
 import { FormActions } from '../ui/FormActions';
 
 interface APIKeyFormData {
@@ -26,6 +26,7 @@ interface APIKeyFormProps {
 }
 
 function APIKeyForm({ apiKey, onSubmit, onCancel }: APIKeyFormProps) {
+  const { t } = useTranslation('common');
   const isEditing = !!apiKey && apiKey.key_id !== 0;
 
   // Use shared form state hook
@@ -47,7 +48,7 @@ function APIKeyForm({ apiKey, onSubmit, onCancel }: APIKeyFormProps) {
   // Validation
   const validate = () => {
     if (!formData.name.trim()) {
-      setError('API key name is required');
+      setError(t('apiKeyForm.nameRequired'));
       return false;
     }
     return true;
@@ -59,64 +60,51 @@ function APIKeyForm({ apiKey, onSubmit, onCancel }: APIKeyFormProps) {
     
     await handleSubmit(e, async () => {
       await onSubmit(formData);
-    }, 'Failed to save API key');
+    }, t('apiKeyForm.saveFailed'));
   };
 
   return (
     <form onSubmit={onFormSubmit} className="space-y-6">
       {/* Error Message */}
-      <FormError error={error} />
+      {error && <Alert type="error" message={error} />}
 
       {/* API Key Name */}
       <FormField
-        label="API Key Name"
+        label={t('apiKeyForm.name')}
         id="name"
         type="text"
         value={formData.name}
         onChange={(e) => updateField('name', e.target.value)}
-        placeholder="e.g., Production API, Mobile App Key"
+        placeholder={t('apiKeyForm.namePlaceholder')}
         disabled={isSubmitting}
         required
-        helpText="Choose a descriptive name to help identify this key's purpose"
+        helpText={t('apiKeyForm.nameHelp')}
       />
 
       {/* Active Status */}
       <FormCheckbox
-        label="Active"
+        label={t('apiKeyForm.active')}
         id="is_active"
         checked={formData.is_active}
         onChange={(e) => updateField('is_active', e.target.checked)}
         disabled={isSubmitting}
-        helpText="Inactive keys cannot be used to access the API"
+        helpText={t('apiKeyForm.activeHelp')}
       />
 
       {/* Info Box */}
       {!isEditing && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <KeyRound className="w-4 h-4 text-blue-400" />
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-blue-800">
-                API Key Security
-              </h3>
-              <div className="mt-2 text-xs text-blue-700">
-                <p>
-                  Your API key will be generated automatically and shown only once. 
-                  Make sure to copy and store it securely before closing this dialog.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <Alert
+          type="info"
+          title={t('apiKeyForm.securityTitle')}
+          message={t('apiKeyForm.securityMessage')}
+        />
       )}
 
       {/* Form Actions */}
       <FormActions
         onCancel={onCancel}
         isSubmitting={isSubmitting}
-        submitLabel={isEditing ? 'Update API Key' : 'Create API Key'}
+        isEditing={isEditing}
       />
     </form>
   );

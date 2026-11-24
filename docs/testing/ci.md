@@ -24,7 +24,7 @@ Runs all tests in `tests/integration/`. Spins up a PostgreSQL + pgvector contain
 
 ### `frontend-lint`
 
-Runs `npm run lint` on the frontend. No tests yet — frontend testing is Phase 5.
+Runs `npm run lint` and then `npm test` on the frontend: the `node --test` files, a type check of the tests and the Vitest + Testing Library render tests in `frontend/tests/ui`.
 
 ---
 
@@ -61,8 +61,8 @@ pytest tests/integration/ -v
 # Full suite with coverage
 pytest -v --cov=backend --cov-report=term-missing
 
-# Lint frontend
-cd frontend && npm run lint
+# Lint and test the frontend
+cd frontend && npm run lint && npm test
 ```
 
 ---

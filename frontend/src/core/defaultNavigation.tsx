@@ -27,6 +27,7 @@ import {
   Target,
   Activity,
   Link2,
+  MessageSquare,
 } from 'lucide-react';
 import type { NavigationConfig } from './types';
 
@@ -73,6 +74,15 @@ export const defaultNavigation: NavigationConfig = {
       section: 'appNavigation'
     },
     {
+      // Visible to every App member (VIEWER and up). A client project can hide the menu entry with
+      // `navigation.remove: ['/apps/:appId/chat']` in `clientConfig.ts`; the route itself stays reachable by URL.
+      // The sidebar translates this name through `breadcrumbs.navigation.chat`.
+      path: '/apps/:appId/chat',
+      name: 'Chat',
+      icon: <MessageSquare size={16} />,
+      section: 'appNavigation'
+    },
+    {
       path: '/apps/:appId/agents',
       name: 'Agents',
       icon: <Bot size={16} />,
@@ -86,7 +96,7 @@ export const defaultNavigation: NavigationConfig = {
     },
     {
       path: '/apps/:appId/data',
-      name: 'Data',
+      name: 'Data sources',
       icon: <Database size={16} />,
       section: 'appNavigation',
       children: [
@@ -150,6 +160,12 @@ export const defaultNavigation: NavigationConfig = {
   // Settings sub-navigation (rendered inside collapsible in sidebar)
   settingsNavigation: [
     {
+      path: '/apps/:appId/settings/general',
+      name: 'General',
+      icon: <Settings size={16} />,
+      section: 'settings'
+    },
+    {
       path: '/apps/:appId/settings/output-destinations',
       name: 'Output Channels',
       icon: <Webhook size={16} />,
@@ -201,12 +217,6 @@ export const defaultNavigation: NavigationConfig = {
       path: '/apps/:appId/settings/group-access',
       name: 'Group Access',
       icon: <Users size={16} />,
-      section: 'settings'
-    },
-    {
-      path: '/apps/:appId/settings/general',
-      name: 'General',
-      icon: <Settings size={16} />,
       section: 'settings'
     }
   ],

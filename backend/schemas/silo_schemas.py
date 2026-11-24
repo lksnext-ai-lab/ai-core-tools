@@ -3,6 +3,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from schemas.embedding_service_schemas import EmbeddingServiceOptionSchema
 from schemas.service_lifecycle_schemas import ServiceLifecycleWarningSchema
+from schemas.indexing_schemas import IndexingOptionsSchema, IndexingSettingsInput
 
 
 class SiloListItemSchema(BaseModel):
@@ -35,6 +36,12 @@ class SiloDetailSchema(BaseModel):
     # Media (video/audio) indexing services
     transcription_service_id: Optional[int] = None
     video_ai_service_id: Optional[int] = None
+    # Indexing settings (tools.document_loaders) and what the form can choose from
+    chunk_size: Optional[int] = None
+    chunk_overlap: Optional[int] = None
+    pdf_loader: Optional[str] = None
+    pdf_loader_options: Dict[str, Any] = {}
+    indexing_options: Optional[IndexingOptionsSchema] = None
     # Form data
     output_parsers: List[Dict[str, Any]]
     embedding_services: List[EmbeddingServiceOptionSchema]
@@ -49,7 +56,7 @@ class SiloDetailSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CreateSiloSchema(BaseModel):
+class CreateSiloSchema(IndexingSettingsInput):
     """Schema for creating a new silo (vector_db_type is settable on creation only)"""
     name: str
     description: Optional[str] = None
@@ -62,7 +69,7 @@ class CreateSiloSchema(BaseModel):
     video_ai_service_id: Optional[int] = None
 
 
-class UpdateSiloSchema(BaseModel):
+class UpdateSiloSchema(IndexingSettingsInput):
     """Schema for updating an existing silo (vector_db_type and embedding_service_id are immutable after creation)"""
     name: str
     description: Optional[str] = None

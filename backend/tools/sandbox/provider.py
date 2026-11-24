@@ -30,6 +30,7 @@ import config as settings
 from schemas.skill_package_payload import SkillPackagePayload
 from utils.logger import get_logger
 
+from .chat_guard import check_pull_guard
 from .skill_archive import (
     SkillPackageTooLargeError,
     build_tar_gz,
@@ -233,6 +234,65 @@ class SandboxProvider(ABC):
             session_key:         Session key to store on the returned handle.
             existing_sandbox_id: Provider sandbox id to attempt resumption of.
         """
+
+    def read_file_limited(self, handle: SandboxHandle, filename: str, max_bytes: int) -> bytes:
+        """Read at most ``max_bytes + 1`` bytes of a workspace file, never loading more into memory.
+
+        Returning ``max_bytes + 1`` bytes (rather than ``max_bytes``) lets the caller detect "bigger than the cap"
+        without trusting any size reported from inside the sandbox. Providers stream (or range-read) and stop at
+        the cap. A provider that cannot bound a read raises ``NotImplementedError``: the output pull then refuses
+        to pull from it instead of reading whole files.
+        """
+        raise NotImplementedError(f"{type(self).__name__} cannot bound a file read")
+
+    @staticmethod
+    def _collect_bounded(chunks, max_bytes: int) -> bytes:
+        """Join iterator chunks until ``max_bytes + 1`` bytes were seen, then stop (closing the iterator)."""
+        limit = max_bytes + 1
+        out = bytearray()
+        try:
+            for chunk in chunks:
+                check_pull_guard()  # a trickling / endless stream must not hold a pull slot forever
+                if not chunk:
+                    continue
+                out += chunk[: limit - len(out)]
+                if len(out) >= limit:
+                    break
+        finally:
+            close = getattr(chunks, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:  # noqa: BLE001
+                    pass
+        return bytes(out)
+
+    def file_sizes(self, handle: SandboxHandle, rel_paths: list[str]) -> dict[str, int]:
+        """Sizes in bytes of workspace-relative files, WITHOUT reading them.
+
+        ``-1`` marks something that is not a regular file (a symlink, ...), which must never be pulled. A path
+        missing from the result has an unknown size. The default asks the sandbox's shell (``stat``, relative
+        to the workspace the bash tool runs in); providers with a metadata API may override it. Never raises
+        for an unusable sandbox shell: it returns what it could parse (possibly nothing).
+        """
+        if not rel_paths or "bash" not in self.get_supported_languages():
+            return {}
+        quoted = " ".join(shlex.quote(p) for p in rel_paths)
+        out = self.run_code(handle, f"stat -c '%F|%s|%n' -- {quoted} 2>/dev/null; true", language="bash", timeout=15)
+        wanted = set(rel_paths)
+        sizes: dict[str, int] = {}
+        # NOTE: the output comes from inside the sandbox and can be forged: callers must treat it as a hint
+        # (a pre-filter) only and bound the actual read with ``read_file_limited``.
+        for line in str(out or "").splitlines():
+            kind, sep, rest = line.partition("|")
+            size_text, sep2, name = rest.partition("|")
+            if not sep or not sep2 or name not in wanted:
+                continue
+            if kind.startswith("regular") and size_text.isdigit():
+                sizes[name] = int(size_text)
+            else:
+                sizes[name] = -1
+        return sizes
 
     def renew_sandbox(self, handle: SandboxHandle, duration: timedelta) -> None:
         """Extend the provider TTL by *duration*.

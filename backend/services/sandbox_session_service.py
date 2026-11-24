@@ -45,7 +45,7 @@ from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Dict, TYPE_CHECKING
+from typing import Any, Dict, TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
@@ -70,8 +70,8 @@ class SandboxCapacityError(RuntimeError):
     shared sandbox host (e.g. a single OpenSandbox server) from being
     exhausted by one tenant opening many concurrent chats. Per-app quotas
     would require threading ``app_id`` through the session key, which is out
-    of scope here. Configurable via the ``SANDBOX_MAX_CONCURRENT_SESSIONS``
-    setting (see :func:`_max_concurrent_sessions`).
+    of scope here. The cap is a code default (50) read through
+    :func:`_max_concurrent_sessions`; it is NOT an environment variable.
     """
 
 
@@ -105,9 +105,8 @@ def _reap_interval_s() -> int:
 def _max_concurrent_sessions() -> int:
     """Return the process-wide cap on simultaneously live sandbox sessions.
 
-    Configurable via ``SANDBOX_MAX_CONCURRENT_SESSIONS`` (read the same way as
-    the other tunables in this module — no dedicated ``config.py`` entry is
-    required; the default applies when unset).
+    A code default (50); ``config.py`` defines no ``SANDBOX_MAX_CONCURRENT_SESSIONS``
+    entry, so setting that name in the environment has no effect.
     """
     try:
         import config as settings  # type: ignore[import]
@@ -117,6 +116,15 @@ def _max_concurrent_sessions() -> int:
     except Exception:
         configured = _DEFAULT_MAX_CONCURRENT_SESSIONS
     return max(1, configured)
+
+
+def _owner_limit(name: str, default: int) -> int:
+    """Per-owner session limit (``0`` = unlimited)."""
+    try:
+        import config as settings  # type: ignore[import]
+        return max(0, int(getattr(settings, name, default)))
+    except Exception:
+        return default
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +283,13 @@ def _persist_sandbox_state(
                              the previously persisted value (if any) is kept.
     """
     session_key = handle.session_key
-    conversation_id = _resolve_conversation_id(conversation, session_key)
+    try:
+        conversation_id = _resolve_conversation_id(conversation, session_key)
+    except Exception:
+        # A deleted / expired ORM conversation: fall back to the id embedded in the key (the row is then
+        # usually gone and nothing is written).
+        conversation = None
+        conversation_id = _conversation_id_from_session_key(session_key) if session_key else None
     if conversation_id is None:
         return
 
@@ -365,6 +379,7 @@ def _persist_sandbox_state(
 def _clear_persisted_sandbox_state(
     conversation: "Conversation | None",
     session_key: str | None,
+    only_sandbox_id: str | None = None,
 ) -> None:
     """Clear ``sandbox_session_id``/``sandbox_state``, in-memory and in the DB.
 
@@ -372,14 +387,17 @@ def _clear_persisted_sandbox_state(
     never writes through a caller-supplied session — always opens its own
     short-lived one.
     """
-    if conversation is not None:
+    if conversation is not None and only_sandbox_id is None:
         try:
             conversation.sandbox_session_id = None
             conversation.sandbox_state = None
         except Exception:
             pass
 
-    conversation_id = _resolve_conversation_id(conversation, session_key)
+    try:
+        conversation_id = _resolve_conversation_id(conversation, session_key)
+    except Exception:
+        conversation_id = _conversation_id_from_session_key(session_key) if session_key else None
     if conversation_id is None:
         return
 
@@ -405,6 +423,14 @@ def _clear_persisted_sandbox_state(
         )
         if row is None:
             return
+        if only_sandbox_id is not None and row.sandbox_session_id != only_sandbox_id:
+            return  # the state belongs to a newer sandbox: leave it
+        if only_sandbox_id is not None and conversation is not None:
+            try:
+                conversation.sandbox_session_id = None
+                conversation.sandbox_state = None
+            except Exception:
+                pass
         row.sandbox_session_id = None
         row.sandbox_state = None
         fresh_db.add(row)
@@ -565,6 +591,10 @@ class _Entry:
     active_uses: int = 0
     created_at: float = field(default_factory=time.monotonic)
     lease_expires_at: float | None = None
+    # ``(app_id, user_id | None)`` of whoever owns the session (per-user / per-App limits); None = unknown.
+    owner: tuple | None = None
+    # ``SandboxService.service_id`` the sandbox was created from (None = env default / unknown).
+    service_id: int | None = None
 
 
 class SandboxSessionService:
@@ -590,6 +620,8 @@ class SandboxSessionService:
         # self._sessions so N concurrently-arriving new keys can't all
         # observe room under the cap and collectively overshoot it.
         self._pending_creates: set = set()
+        # Owner of every in-flight creation (same lifetime as ``_pending_creates``), for the per-owner limits.
+        self._pending_owner: Dict[str, tuple | None] = {}
         self._reaper = threading.Thread(
             target=self._reaper_loop, daemon=True, name="sandbox-reaper"
         )
@@ -640,6 +672,7 @@ class SandboxSessionService:
         conversation: "Conversation | None" = None,
         db: Session | None = None,
         sandbox_service_id: int | None = None,
+        owner: tuple | None = None,
     ) -> SandboxHandle:
         """Return an existing sandbox handle or create one.
 
@@ -660,18 +693,29 @@ class SandboxSessionService:
             sandbox_service_id: The resolved ``SandboxService.service_id`` that
                                  produced *provider*'s credentials, if any.
                                  Persisted so cleanup paths can rebuild a
-                                 credential-bearing provider later.
+                                 credential-bearing provider later. A cached
+                                 sandbox created from ANOTHER service is
+                                 destroyed (with its own provider) and
+                                 recreated.
+            owner:               ``(app_id, user_id | None)`` of the session
+                                 owner, for the per-user / per-App limits
+                                 (``SANDBOX_MAX_SESSIONS_PER_USER`` /
+                                 ``..._PER_APP``). ``None`` = not limited.
 
         Returns:
             A live ``SandboxHandle``.
 
         Raises:
-            SandboxCapacityError: If the global concurrent-session cap
-                (``SANDBOX_MAX_CONCURRENT_SESSIONS``) has been reached and a
-                new sandbox would need to be created.
+            SandboxCapacityError: If the global concurrent-session cap, or the
+                owner's per-user / per-App limit with nothing idle to evict, has
+                been reached and a new sandbox would need to be created.
         """
+        switched = None
         with self._lock:
             entry = self._sessions.get(session_key)
+            if entry is not None and self._service_switched(entry, sandbox_service_id, provider, owner):
+                switched = self._sessions.pop(session_key)
+                entry = None
             if entry is not None:
                 try:
                     provider.touch_sandbox(entry.handle, _idle_timeout_s())
@@ -692,6 +736,9 @@ class SandboxSessionService:
                         "SandboxSessionService: cached sandbox expired for %s — recreating",
                         session_key,
                     )
+        if switched is not None:
+            self._destroy_entry(session_key, switched, conversation=conversation, reason="service switched")
+            switched = None
 
         # Serialize *creation* per session_key: two concurrent callers for the
         # same key (double-submit, retry, request race) must not both create
@@ -703,6 +750,12 @@ class SandboxSessionService:
             # key's sandbox while we were waiting for the creation lock.
             with self._lock:
                 entry = self._sessions.get(session_key)
+                if entry is not None and self._service_switched(entry, sandbox_service_id, provider, owner):
+                    switched = self._sessions.pop(session_key)
+                    entry = None
+            if switched is not None and entry is None and self._sessions.get(session_key) is None:
+                self._destroy_entry(session_key, switched, conversation=conversation, reason="service switched")
+                switched = None
             if entry is not None:
                 try:
                     provider.touch_sandbox(entry.handle, _idle_timeout_s())
@@ -741,6 +794,7 @@ class SandboxSessionService:
             # SANDBOX_CREATE_TIMEOUT_S) alongside already-live self._sessions.
             # self._creation_locks above only serializes the SAME key.
             max_sessions = _max_concurrent_sessions()
+            evicted: list[tuple[str, _Entry]] = []
             with self._lock:
                 live_count = len(self._sessions) + len(self._pending_creates)
                 if live_count >= max_sessions:
@@ -755,7 +809,12 @@ class SandboxSessionService:
                         f"Maximum concurrent sandbox sessions ({max_sessions}) reached. "
                         "Try again once an existing sandbox session becomes idle."
                     )
+                self._make_room_for_owner(session_key, owner, evicted)
                 self._pending_creates.add(session_key)
+                self._pending_owner[session_key] = owner
+            # Destroy the evicted idle sessions outside the lock (provider calls can be slow).
+            for evicted_key, evicted_entry in evicted:
+                self._destroy_entry(evicted_key, evicted_entry, reason="owner limit")
 
             try:
                 saved_state = _load_sandbox_state(conversation)
@@ -815,7 +874,9 @@ class SandboxSessionService:
                 )
 
                 with self._lock:
-                    self._sessions[session_key] = _Entry(handle=handle, provider=provider)
+                    self._sessions[session_key] = _Entry(
+                        handle=handle, provider=provider, owner=owner, service_id=sandbox_service_id
+                    )
 
                 logger.info(
                     "SandboxSessionService: created sandbox for %s (sandbox_id=%s, provider=%s)",
@@ -829,6 +890,116 @@ class SandboxSessionService:
                 # counted via self._sessions instead) or failed (freed up).
                 with self._lock:
                     self._pending_creates.discard(session_key)
+                    self._pending_owner.pop(session_key, None)
+
+    # ------------------------------------------------------------------
+    # Per-owner limits / switched service
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _service_switched(
+        entry: "_Entry", requested_service_id: int | None, requested_provider: Any, requested_owner: tuple | None
+    ) -> bool:
+        """True when a cached CHAT sandbox was created from another service/provider than the one requested now.
+
+        ``None`` is a real value (the system default), so App default <-> system default is a switch in both
+        directions; the provider class is compared too. Only owner-tagged (Chat) entries take part: agents keep
+        their previous behaviour.
+        """
+        if requested_owner is None or entry.owner is None:
+            return False
+        return entry.service_id != requested_service_id or type(entry.provider) is not type(requested_provider)
+
+    def _owner_counts(self, owner: tuple, exclude_key: str) -> tuple[int, int]:
+        """``(sessions of this user, sessions of this App)`` incl. in-flight creations. Caller holds ``_lock``."""
+        app_id, user_id = owner
+        user_n = app_n = 0
+        owners = [e.owner for k, e in self._sessions.items() if k != exclude_key]
+        owners += [o for k, o in self._pending_owner.items() if k != exclude_key]
+        for other in owners:
+            if other is None or other[0] != app_id:
+                continue
+            app_n += 1
+            if user_id is not None and other[1] == user_id:
+                user_n += 1
+        return user_n, app_n
+
+    def _own_idle_sessions(self, owner: tuple, exclude: set) -> list[str]:
+        """Keys of the REQUESTER's own sessions that may be evicted, least recently used first.
+
+        Evictable = same ``(app, user)`` owner, no active use, no live lease, and idle for at least
+        ``SANDBOX_EVICT_MIN_IDLE_S`` (a session between two tool calls of a running turn is not idle). Another
+        user's session is never evictable. Caller holds ``_lock``.
+        """
+        now = time.monotonic()
+        min_idle = _owner_limit("SANDBOX_EVICT_MIN_IDLE_S", 60)
+        found = [
+            (e.last_used, k) for k, e in self._sessions.items()
+            if k not in exclude
+            and e.owner == owner
+            and e.active_uses <= 0
+            and (e.lease_expires_at is None or e.lease_expires_at < now)
+            and now - e.last_used >= min_idle
+        ]
+        return [k for _, k in sorted(found)]
+
+    def _make_room_for_owner(self, session_key: str, owner: tuple | None, evicted: list) -> None:
+        """Enforce the per-user and per-App limits for a NEW Chat session (caller holds ``_lock``).
+
+        Policy: over a limit, only the requester's OWN sufficiently idle sessions are evicted (LRU first); another
+        user's session is never touched. When that is not enough a ``SandboxCapacityError`` is raised for the
+        requester only. Everything is decided first and the entries are popped only when success is certain, so a
+        refusal destroys nothing. Sessions without an owner and ``0`` limits are not limited; a session without a
+        known user counts towards the App only (and can evict nothing).
+        """
+        if owner is None:
+            return
+        app_id, user_id = owner
+        user_limit = _owner_limit("SANDBOX_MAX_SESSIONS_PER_USER", 3)
+        app_limit = _owner_limit("SANDBOX_MAX_SESSIONS_PER_APP", 10)
+        user_n, app_n = self._owner_counts(owner, session_key)
+        chosen: list[str] = []
+        candidates = self._own_idle_sessions(owner, set()) if user_id is not None else []
+        if user_limit and user_id is not None:
+            need = user_n - user_limit + 1
+            if need > 0:
+                if len(candidates) < need:
+                    raise SandboxCapacityError(
+                        f"Maximum sandbox sessions per user ({user_limit}) reached. "
+                        "Try again once one of your sandbox sessions becomes idle."
+                    )
+                chosen = candidates[:need]
+        if app_limit:
+            need = app_n - len(chosen) - app_limit + 1
+            if need > 0:
+                extra = [k for k in candidates if k not in chosen]
+                if len(extra) < need:
+                    raise SandboxCapacityError(
+                        f"Maximum sandbox sessions for this app ({app_limit}) reached. "
+                        "Try again once one of your sandbox sessions becomes idle."
+                    )
+                chosen += extra[:need]
+        for key in chosen:
+            evicted.append((key, self._sessions.pop(key)))
+
+    def _destroy_entry(
+        self, session_key: str, entry: "_Entry", *, conversation: "Conversation | None" = None, reason: str = ""
+    ) -> None:
+        """Destroy an entry already removed from the registry, with ITS OWN provider; best effort, no lock held.
+
+        The persisted state of the conversation is cleared too, so its next turn creates a fresh sandbox instead
+        of trying to resume the destroyed one.
+        """
+        try:
+            entry.provider.destroy_sandbox(entry.handle)
+        except Exception as exc:
+            logger.warning(
+                "SandboxSessionService: error destroying sandbox for %s (%s): %s",
+                session_key, reason, type(exc).__name__,
+            )
+        # Only if the persisted state still points at the sandbox just destroyed (a newer one must survive).
+        _clear_persisted_sandbox_state(conversation, session_key, only_sandbox_id=entry.handle.sandbox_id)
+        logger.info("SandboxSessionService: destroyed sandbox for %s (%s)", session_key, reason)
 
     def _create_sandbox_with_timeout(
         self,
@@ -909,28 +1080,39 @@ class SandboxSessionService:
                 return False
             entry.active_uses += 1
             entry.last_used = now_mono
-            entry.lease_expires_at = lease_expires_mono
+            # Only ever extend: a short per-call lease must not shorten the longer
+            # lease a Chat turn holds for its whole duration (the reaper collects
+            # entries whose lease expired long ago even while active_uses > 0).
+            entry.lease_expires_at = max(entry.lease_expires_at or 0.0, lease_expires_mono)
             handle = entry.handle
             provider = entry.provider
         try:
-            provider.touch_sandbox(handle, lease_seconds)
-        except SandboxExpiredError:
-            self.evict(session_key)
-            raise
-        except Exception as exc:
-            logger.debug(
-                "SandboxSessionService.begin_use: provider touch failed (key=%s): %s",
-                session_key,
-                exc,
-                exc_info=True,
+            try:
+                provider.touch_sandbox(handle, lease_seconds)
+            except SandboxExpiredError:
+                self.evict(session_key)
+                raise
+            except Exception as exc:
+                logger.debug(
+                    "SandboxSessionService.begin_use: provider touch failed (key=%s): %s",
+                    session_key,
+                    type(exc).__name__,
+                )
+            _persist_sandbox_state(
+                conversation,
+                handle,
+                db=db,
+                lease_expires_at=lease_expires_at,
+                sandbox_service_id=sandbox_service_id,
             )
-        _persist_sandbox_state(
-            conversation,
-            handle,
-            db=db,
-            lease_expires_at=lease_expires_at,
-            sandbox_service_id=sandbox_service_id,
-        )
+        except BaseException:
+            # Never leave the increment behind: a pinned lease would hold a cap slot until restart.
+            with self._lock:
+                if self._sessions.get(session_key) is entry:
+                    entry.active_uses = max(0, entry.active_uses - 1)
+                    if entry.active_uses == 0:
+                        entry.lease_expires_at = None
+            raise
         return True
 
     def end_use(
@@ -1040,15 +1222,36 @@ class SandboxSessionService:
                 exc_info=True,
             )
 
+    def destroy_confirmed(self, session_key: str) -> bool:
+        """Like :meth:`destroy`, but reports whether the provider confirmed the destroy.
+
+        ``True`` when there was nothing to destroy or the provider destroyed it; ``False`` when the provider call
+        failed (the registry entry is gone either way). Callers use it to decide whether the persisted state may
+        be cleared: an unconfirmed remote sandbox must stay findable by the DB reaper.
+        """
+        with self._lock:
+            entry = self._sessions.pop(session_key, None)
+        if entry is None:
+            return True
+        try:
+            entry.provider.destroy_sandbox(entry.handle)
+            return True
+        except Exception as exc:
+            logger.warning(
+                "SandboxSessionService: error destroying sandbox for %s: %s", session_key, type(exc).__name__
+            )
+            return False
+
     def destroy_all_for_agent(self, agent_id: int) -> None:
         """Destroy all sandboxes that belong to *agent_id*.
 
         Called when an agent is deleted.  Matches all key patterns:
         ``conv_{agent_id}_*``, ``thread_{agent_id}_*``, and ``anon_{agent_id}``.
         """
-        prefixes = (f"conv_{agent_id}_", f"thread_{agent_id}_", f"anon_{agent_id}")
+        prefixes = (f"conv_{agent_id}_", f"thread_{agent_id}_")
+        anonymous = f"anon_{agent_id}"  # no separator after the id: an exact match (``anon_1`` is not ``anon_10``)
         with self._lock:
-            matching = [k for k in self._sessions if any(k.startswith(p) for p in prefixes)]
+            matching = [k for k in self._sessions if k == anonymous or any(k.startswith(p) for p in prefixes)]
             entries = {k: self._sessions.pop(k) for k in matching}
 
         for key, entry in entries.items():
@@ -1131,6 +1334,9 @@ class SandboxSessionService:
                     and (e.lease_expires_at is None or e.lease_expires_at < now)
                     and (now - e.last_used) > ttl_s
                 )
+                # Defence in depth: a lease long past its expiry that was never released (an abandoned thread)
+                # must not pin the entry, a global slot and a user slot forever.
+                or (e.lease_expires_at is not None and e.lease_expires_at < now - ttl_s)
             ]
             stale_entries = {k: self._sessions.pop(k) for k in stale_keys}
 

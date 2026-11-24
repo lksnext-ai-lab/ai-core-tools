@@ -1,17 +1,63 @@
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Search, Info, Clock, History, Bot, SplitSquareHorizontal } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Search, Clock, Bot } from 'lucide-react';
 import SearchControls from '../components/playground/SearchControls';
 import SiloAPISnippets from '../components/playground/SiloAPISnippets';
 import SearchFilters from '../components/playground/SearchFilters';
 import ResultCard from '../components/playground/ResultCard';
 import Modal from '../components/ui/Modal';
+import { FormField } from '../components/ui/FormField';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 import { useSiloSearch } from '../hooks/useSiloSearch';
 import type { PanelState } from '../hooks/useSiloSearch';
+import { LoadingState } from '../components/ui/LoadingState';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import Alert from '../components/ui/Alert';
+import Title from '../components/ui/Title';
+import CardApp from '../components/ui/CardApp';
+import HelpRow from '../components/ui/HelpRow';
+import BackgroundImage from '../components/ui/BackgroundImage';
+
+interface PlaygroundSectionProps {
+  readonly title: string;
+  /** Short text shown on the right of the header (e.g. current value). */
+  readonly summary?: ReactNode;
+  readonly children: ReactNode;
+}
+
+/**
+ * Collapsible section of the playground search area (filters, settings, API, history, compare).
+ * Single place for its look — same border/background as HelpRow, full width, starts closed.
+ */
+function PlaygroundSection({ title, summary, children }: PlaygroundSectionProps) {
+  return (
+    <details className="group rounded-md border border-bg-soft bg-canvas-alt dark:border-bronze-border-dark dark:bg-canvas-alt-dark">
+      <summary
+        className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-md px-4 py-3 text-fg dark:text-fg-dark
+                   [&::-webkit-details-marker]:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus dark:focus-visible:outline-focus-dark"
+      >
+        <span className="text-sm font-medium">{title}</span>
+        <span className="flex min-w-0 items-center gap-2.5 text-[12.5px] text-fg-secondary dark:text-fg-secondary-dark">
+          {summary && <span className="truncate">{summary}</span>}
+          <span
+            aria-hidden="true"
+            className="text-lg leading-none text-fg-tertiary transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none dark:text-fg-tertiary-dark"
+          >
+            ›
+          </span>
+        </span>
+      </summary>
+      <div className="border-t border-bg-soft p-4 dark:border-bronze-border-dark">
+        {children}
+      </div>
+    </details>
+  );
+}
 
 function SiloPlaygroundPage() {
   const { appId, siloId } = useParams();
+  const { t, i18n } = useTranslation('common');
   const {
     silo,
     loading,
@@ -44,20 +90,15 @@ function SiloPlaygroundPage() {
     deleteByFilterLoading,
     deleteByFilterConfirmName,
     setDeleteByFilterConfirmName,
-    showApiSnippets,
-    setShowApiSnippets,
     reindexLoading,
     reindexMessage,
     queryHistory,
-    showHistory,
-    setShowHistory,
     lastClientMs,
     lastServerMs,
     showAgentShortcut,
     setShowAgentShortcut,
     appAgentsForSilo,
     compareMode,
-    setCompareMode,
     panelA,
     setPanelA,
     panelB,
@@ -83,10 +124,7 @@ function SiloPlaygroundPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600"></div>
-          <span className="ml-2">Loading silo...</span>
-        </div>
+        <LoadingState variant="page" message={t('siloPlayground.loadingSilo')} />
       </div>
     );
   }
@@ -94,21 +132,18 @@ function SiloPlaygroundPage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error Loading Silo</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-              <button 
-                onClick={handleBack}
-                className="mt-2 text-sm text-red-800 hover:text-red-900 underline"
-              >
-                Back to Silos
+        <Alert
+          type="error"
+          title={t('siloPlayground.loadErrorTitle')}
+          message={(
+            <>
+              {error}
+              <button type="button" onClick={handleBack} className="mt-2 block underline">
+                {t('siloPlayground.backToSilos')}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        />
       </div>
     );
   }
@@ -116,21 +151,18 @@ function SiloPlaygroundPage() {
   if (!silo) {
     return (
       <div className="space-y-6">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex">
-            <AlertTriangle className="w-5 h-5 text-yellow-400 mr-3 shrink-0" />
-            <div>
-              <h3 className="text-sm font-medium text-yellow-800">Silo Not Found</h3>
-              <p className="text-sm text-yellow-600 mt-1">The requested silo could not be found.</p>
-              <button 
-                onClick={handleBack}
-                className="mt-2 text-sm text-yellow-800 hover:text-yellow-900 underline"
-              >
-                Back to Silos
+        <Alert
+          type="warning"
+          title={t('siloPlayground.notFoundTitle')}
+          message={(
+            <>
+              <span className="block">{t('siloPlayground.notFoundMessage')}</span>
+              <button type="button" onClick={handleBack} className="mt-2 block underline">
+                {t('siloPlayground.backToSilos')}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        />
       </div>
     );
   }
@@ -142,13 +174,13 @@ function SiloPlaygroundPage() {
   ) {
     const panelMax = panel.results.length > 0 ? Math.max(...panel.results.map((r) => r.score ?? 0)) : 0;
     return (
-      <div className="bg-white shadow rounded-lg p-4 flex flex-col gap-3">
+      <div className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4 dark:border-line-dark dark:bg-surface-dark">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
-            Panel {label}
+          <span className="rounded bg-bronze-bg px-2 py-0.5 text-xs font-medium text-bronze dark:bg-bronze-bg-dark dark:text-bronze-dark">
+            {t('siloPlayground.panelLabel', { label })}
           </span>
           {panel.clientMs !== null && (
-            <span className="text-xs text-gray-400">{panel.clientMs} ms</span>
+            <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{panel.clientMs} ms</span>
           )}
         </div>
 
@@ -158,34 +190,30 @@ function SiloPlaygroundPage() {
             value={panel.query}
             onChange={(e) => setter((p) => ({ ...p, query: e.target.value }))}
             onKeyDown={(e) => { if (e.key === 'Enter') void searchPanel(panel.query, setter); }}
-            placeholder="Enter query…"
-            className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500"
+            placeholder={t('siloPlayground.queryPlaceholder')}
+            aria-label={t('siloPlayground.queryForPanel', { label })}
+            className="min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-fg placeholder:text-fg-tertiary outline-none focus:border-accent disabled:opacity-60 dark:border-line-dark dark:bg-surface-dark dark:text-fg-dark dark:placeholder:text-fg-tertiary-dark dark:focus:border-accent-dark"
             disabled={panel.isSearching}
           />
-          <button
-            type="button"
+          <ButtonApp
+            label={t('siloPlayground.search')}
             onClick={() => void searchPanel(panel.query, setter)}
-            disabled={panel.isSearching}
-            className="px-3 py-1.5 text-sm bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-400 text-white rounded flex items-center gap-1"
-          >
-            {panel.isSearching && (
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />
-            )}
-            Search
-          </button>
+            loading={panel.isSearching}
+            size="small"
+          />
         </div>
 
-        {panel.error && <p className="text-xs text-red-600">{panel.error}</p>}
+        {panel.error && <p className="text-xs text-error dark:text-error-dark">{panel.error}</p>}
 
         {panel.results.length === 0 && !panel.isSearching && (
-          <p className="text-xs text-gray-400 italic">No results yet. Run a search.</p>
+          <p className="text-xs italic text-fg-tertiary dark:text-fg-tertiary-dark">{t('siloPlayground.noResultsYet')}</p>
         )}
 
         <div className="space-y-2 overflow-y-auto max-h-[60vh]">
           {panel.results.map((result, idx) => {
             const isShared = result.id ? sharedIds.has(result.id) : false;
             return (
-              <div key={result.id ?? idx} className={isShared ? 'ring-2 ring-yellow-400 rounded-lg' : ''}>
+              <div key={result.id ?? idx} className={isShared ? 'rounded-lg ring-2 ring-accent dark:ring-accent-dark' : ''}>
                 <ResultCard
                   result={result}
                   index={idx}
@@ -202,297 +230,267 @@ function SiloPlaygroundPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mt-2">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Silo Playground: {silo.name}
-          </h1>
-          <p className="text-gray-600">
-            Test semantic search and explore documents in this silo
-          </p>
-        </div>
-        <button
-          onClick={handleBack}
-          className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
-        >
-          <ArrowLeft className="w-4 h-4 inline-block mr-1" /> Back to Silos
-        </button>
+        <Title variant='titPrincipal' titulo={t('siloPlayground.title', { name: silo.name })} subtitulo={t('siloPlayground.subtitle')} />
       </div>
+
+        <HelpRow title={t('siloPlayground.helpTitle')}>
+          <p>
+            {t('siloPlayground.helpDescription')}
+          </p>
+          <p className="mt-2 font-medium text-fg dark:text-fg-dark">{t('siloPlayground.tipsTitle')}</p>
+          <ul className="mt-1 space-y-1">
+            <li>• {t('siloPlayground.tipNaturalLanguage')}</li>
+            <li>• {t('siloPlayground.tipBrowseAll')}</li>
+            <li>• {t('siloPlayground.tipDifferentPhrasing')}</li>
+            <li>• {t('siloPlayground.tipRelevance')}</li>
+        </ul>
+      </HelpRow>
 
       <ServiceLifecycleAlert warnings={silo.lifecycle_warnings} variant="full" className="max-h-48 overflow-y-auto" />
 
       {/* Silo Info */}
-      <div className="bg-white shadow rounded-lg p-6">
+      <CardApp variant="canvas" className="p-6 mt-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <h3 className="text-sm font-medium text-gray-500">Silo Type</h3>
-            <p className="text-lg font-semibold text-gray-900">
-              {silo.type || 'Custom'}
+            <h3 className="text-xs text-bronze-dark uppercase tracking-wider mb-1">{t('siloPlayground.siloType')}</h3>
+            <p className="text-md font-semibold text-fg dark:text-fg-dark">
+              {silo.type || t('siloPlayground.custom')}
             </p>
           </div>
           <div>
-            <h3 className="text-sm font-medium text-gray-500">Documents</h3>
-            <p className="text-lg font-semibold text-gray-900">
-              {silo.docs_count.toLocaleString()}
+            <h3 className="text-xs text-bronze-dark uppercase tracking-wider mb-1">{t('siloPlayground.documents')}</h3>
+            <p className="text-md font-semibold text-fg dark:text-fg-dark">
+              {silo.docs_count.toLocaleString(i18n.resolvedLanguage)}
             </p>
           </div>
           <div>
-            <h3 className="text-sm font-medium text-gray-500">Created</h3>
-            <p className="text-lg font-semibold text-gray-900">
-              {silo.created_at ? new Date(silo.created_at).toLocaleDateString() : 'Unknown'}
+            <h3 className="text-xs text-bronze-dark uppercase tracking-wider mb-1">{t('siloPlayground.created')}</h3>
+            <p className="text-md font-semibold text-fg dark:text-fg-dark">
+              {silo.created_at ? new Date(silo.created_at).toLocaleDateString(i18n.resolvedLanguage) : t('siloPlayground.unknown')}
             </p>
           </div>
         </div>
-      </div>
+      </CardApp>
 
       {/* Search Interface */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Search Documents</h2>
-        
-        <form onSubmit={handleSearch} className="space-y-4">
-          {/* Metadata Filters */}
-          <SearchFilters
-            metadataFields={silo.metadata_fields}
-            dbType={systemDBConfig}
-            disabled={isSearching}
-            onFilterMetadataChange={handleFilterMetadataChange}
-            appId={appId}
-            siloId={siloId}
-            siloStorageKey={siloId}
-          />
+      <section className="mb-6 mt-6" aria-labelledby="search-documents-title">
+        <h2 id="search-documents-title" className="mb-3 font-display text-[20px] tracking-[-0.02em] text-ink dark:text-ink-dark">
+          {t('siloPlayground.searchDocuments')}
+        </h2>
 
-          <SearchControls
-            siloId={siloId ?? ''}
-            value={searchControls}
-            onChange={setSearchControls}
-            disabled={isSearching}
-          />
-
-          {/* Content-length filter */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-sm font-medium text-gray-700">Content length (chars):</span>
-            <div className="flex items-center gap-1">
-              <label htmlFor="minContentLength" className="text-xs text-gray-500">Min</label>
-              <input
-                type="number"
-                id="minContentLength"
-                min={0}
-                placeholder="–"
-                value={minContentLength ?? ''}
-                onChange={(e) => setMinContentLength(e.target.value === '' ? null : Number(e.target.value))}
-                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-yellow-400"
-                disabled={isSearching}
-              />
-            </div>
-            <div className="flex items-center gap-1">
-              <label htmlFor="maxContentLength" className="text-xs text-gray-500">Max</label>
-              <input
-                type="number"
-                id="maxContentLength"
-                min={0}
-                placeholder="–"
-                value={maxContentLength ?? ''}
-                onChange={(e) => setMaxContentLength(e.target.value === '' ? null : Number(e.target.value))}
-                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-yellow-400"
-                disabled={isSearching}
-              />
-            </div>
-            {(minContentLength != null || maxContentLength != null) && (
-              <button
-                type="button"
-                onClick={() => { setMinContentLength(null); setMaxContentLength(null); }}
-                className="text-xs text-gray-400 hover:text-gray-600 underline"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-
+        <form onSubmit={handleSearch} className="space-y-3">
           {/* Search Query */}
-          <div>
-            <label htmlFor="searchQuery" className="block text-sm font-medium text-gray-700 mb-2">
-              Search Query
+          <div className="relative">
+            <label htmlFor="searchQuery" className="sr-only">
+              {t('siloPlayground.searchQuery')}
             </label>
-            <div className="flex gap-2">
-              <input
+            <div className="flex gap-2.5">
+              <FormField
                 type="text"
                 id="searchQuery"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Enter your search query (leave empty to browse all documents)..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                autoComplete="off"
+                placeholder={t('siloPlayground.searchPlaceholder')}
+                className="min-w-0 flex-1"
+                inputClassName="!px-[15px] !py-[13px] !text-[15px]"
                 disabled={isSearching}
               />
-              <button
+              <ButtonApp
                 type="submit"
-                disabled={isSearching}
-                className="px-6 py-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-400 text-white rounded-lg flex items-center"
-              >
-                {isSearching && (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                )}
-                {isSearching ? 'Searching...' : 'Search'}
-              </button>
+                label={isSearching ? t('siloPlayground.searching') : t('siloPlayground.search')}
+                loading={isSearching}
+              />
             </div>
           </div>
-        </form>
 
-        {/* Phase 6 observability toolbar */}
-        {(lastClientMs !== null || queryHistory.length > 0 || appAgentsForSilo.length > 0) && (
-          <div className="flex flex-wrap items-center gap-3 mt-3">
-            {lastClientMs !== null && (
-              <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                <Clock className="w-3.5 h-3.5" />
-                <span>Client: <strong>{lastClientMs} ms</strong></span>
-                {lastServerMs !== null && (
-                  <span className="text-gray-400">· Server: <strong>{lastServerMs} ms</strong></span>
-                )}
-              </div>
-            )}
-
-            {queryHistory.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowHistory((v) => !v)}
-                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
-              >
-                <History className="w-3.5 h-3.5" />
-                {showHistory ? 'Hide history' : `History (${queryHistory.length})`}
-              </button>
-            )}
-
-            {appAgentsForSilo.length > 0 && (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowAgentShortcut((v) => !v)}
-                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded px-2 py-1"
-                >
-                  <Bot className="w-3.5 h-3.5" />
-                  Test against agent
-                </button>
-                {showAgentShortcut && (
-                  <div className="absolute left-0 top-full mt-1 z-10 bg-white border border-gray-200 rounded shadow-md min-w-44">
-                    {appAgentsForSilo.map((agent) => (
-                      <button
-                        key={agent.id}
-                        type="button"
-                        onClick={() => handleNavigateToAgent(agent.id)}
-                        className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50 truncate"
-                      >
-                        {agent.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setCompareMode((v) => !v)}
-              className={`flex items-center gap-1 text-xs border rounded px-2 py-1 ${
-                compareMode
-                  ? 'border-yellow-500 text-yellow-700 bg-yellow-50'
-                  : 'border-gray-200 text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <SplitSquareHorizontal className="w-3.5 h-3.5" />
-              {compareMode ? 'Exit compare' : 'Compare'}
-            </button>
-          </div>
-        )}
-
-        {showHistory && queryHistory.length > 0 && (
-          <div className="border border-gray-200 rounded-lg bg-gray-50 p-3 space-y-1 mt-3">
-            <p className="text-xs font-medium text-gray-600 mb-2">Recent queries</p>
-            {queryHistory.map((entry, i) => (
-              <div key={entry.timestamp} className="flex items-center gap-2 text-sm">
-                <button
-                  type="button"
-                  onClick={() => rerunHistoryEntry(entry)}
-                  className="flex-1 text-left truncate text-gray-800 hover:text-yellow-700 hover:underline"
-                  title={entry.query}
-                >
-                  {entry.query || '(empty query)'}
-                </button>
-                <span className="text-xs text-gray-400 shrink-0">
-                  {new Date(entry.timestamp).toLocaleTimeString()}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => deleteHistoryEntry(i)}
-                  className="text-gray-300 hover:text-red-400 shrink-0 text-base leading-none"
-                  title="Remove"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* API snippet toggle + panel */}
-        <div className="mt-3">
-          <button
-            type="button"
-            onClick={() => setShowApiSnippets((v) => !v)}
-            className="text-sm text-gray-500 hover:text-gray-700 underline"
-          >
-            {showApiSnippets ? 'Hide API snippet' : 'Show as API call'}
-          </button>
-          {showApiSnippets && (
-            <div className="mt-3">
-              <SiloAPISnippets
-                appId={appId ?? ''}
-                siloId={siloId ?? ''}
-                siloName={silo?.name}
-                query={searchQuery}
-                limit={searchControls.limit}
-                filterMetadata={filterMetadata as Record<string, unknown> | undefined}
-                searchType={searchControls.searchType}
-                scoreThreshold={searchControls.searchType === 'similarity_score_threshold' ? searchControls.scoreThreshold : undefined}
-                fetchK={searchControls.searchType === 'mmr' ? searchControls.fetchK : undefined}
-                lambdaMult={searchControls.searchType === 'mmr' ? searchControls.lambdaMult : undefined}
-              />
+          {/* Response time + agent shortcut */}
+          {(lastClientMs !== null || appAgentsForSilo.length > 0) && (
+            <div className="flex min-h-[18px] flex-wrap items-center gap-3.5 text-[12.5px] text-fg-tertiary dark:text-fg-tertiary-dark">
+              {lastClientMs !== null && (
+                <div className="flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{t('siloPlayground.clientTime')}: <strong className="font-medium text-fg-secondary dark:text-fg-secondary-dark">{lastClientMs} ms</strong></span>
+                  {lastServerMs !== null && (
+                    <span>· {t('siloPlayground.serverTime')}: <strong className="font-medium text-fg-secondary dark:text-fg-secondary-dark">{lastServerMs} ms</strong></span>
+                  )}
+                </div>
+              )}
+              
+              {appAgentsForSilo.length > 0 && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowAgentShortcut((v) => !v)}
+                    className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-fg-secondary hover:text-fg dark:border-line-dark dark:text-fg-secondary-dark dark:hover:text-fg-dark"
+                  >
+                    <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+                    {t('siloPlayground.testAgainstAgent')}
+                  </button>
+                  {showAgentShortcut && (
+                    <div className="absolute left-0 top-full z-10 mt-1 min-w-44 rounded-md border border-line bg-surface shadow-md dark:border-line-dark dark:bg-surface-dark">
+                      {appAgentsForSilo.map((agent) => (
+                        <button
+                          key={agent.id}
+                          type="button"
+                          onClick={() => handleNavigateToAgent(agent.id)}
+                          className="block w-full truncate px-3 py-2 text-left text-sm text-fg hover:bg-surface-hover dark:text-fg-dark dark:hover:bg-surface-hover-dark"
+                        >
+                          {agent.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
-        </div>
 
-        {/* Search Error */}
-        {searchError && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex">
-              <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
+          {/* Metadata Filters */}
+          {(silo.metadata_fields?.length ?? 0) > 0 && (
+            <PlaygroundSection title={t('siloPlayground.metadataFilters')}>
+              <SearchFilters
+                metadataFields={silo.metadata_fields}
+                dbType={systemDBConfig}
+                disabled={isSearching}
+                onFilterMetadataChange={handleFilterMetadataChange}
+                appId={appId}
+                siloId={siloId}
+                siloStorageKey={siloId}
+              />
+            </PlaygroundSection>
+          )}
+
+          {/* Search settings: controls + content-length filter */}
+          <PlaygroundSection title={t('siloPlayground.searchSettings')} summary={t('siloPlayground.topKSummary', { count: searchControls.limit })}>
+            <div className="space-y-5">
+              <SearchControls
+                siloId={siloId ?? ''}
+                value={searchControls}
+                onChange={setSearchControls}
+                disabled={isSearching}
+              />
+
               <div>
-                <h3 className="text-sm font-medium text-red-800">Search Error</h3>
-                <p className="text-sm text-red-600 mt-1">{searchError}</p>
+              <p className="mb-2 text-[13px] font-medium text-fg dark:text-fg-dark">
+                {t('siloPlayground.contentLength')} <span className="font-normal text-fg-tertiary dark:text-fg-tertiary-dark">({t('siloPlayground.characters')})</span>
+              </p>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex shrink-0 items-center gap-1">
+                  <FormField
+                    label={t('siloPlayground.min')}
+                    labelClassName="text-[13px] text-fg-secondary dark:text-fg-secondary-dark mb-0 whitespace-nowrap"
+                    type="number"
+                    id="minContentLength"
+                    min={0}
+                    placeholder="–"
+                    value={minContentLength ?? ''}
+                    onChange={(e) => setMinContentLength(e.target.value === '' ? null : Number(e.target.value))}
+                    className="flex shrink-0 items-center gap-1"
+                    inputClassName="!w-20 px-2 py-1"
+                    disabled={isSearching}
+                  />
+                </div>
+                <FormField
+                  label={t('siloPlayground.max')}
+                  labelClassName="text-[13px] text-fg-secondary dark:text-fg-secondary-dark mb-0 whitespace-nowrap"
+                  type="number"
+                  id="maxContentLength"
+                  min={0}
+                  placeholder="–"
+                  value={maxContentLength ?? ''}
+                  onChange={(e) => setMaxContentLength(e.target.value === '' ? null : Number(e.target.value))}
+                  className="flex shrink-0 items-center gap-1"
+                  inputClassName="!w-20 px-2 py-1"
+                  disabled={isSearching}
+                />
+                {(minContentLength != null || maxContentLength != null) && (
+                  <ButtonApp
+                    type="button"
+                    onClick={() => { setMinContentLength(null); setMaxContentLength(null); }}
+                    label={t('siloPlayground.clear')}
+                    variant="secondary"
+                    size="medium"
+                  />
+                )}
+              </div>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          </PlaygroundSection>
+        </form>
 
-      {/* A/B compare mode */}
-      {compareMode && (
-        <div className="grid grid-cols-2 gap-4">
-          {renderComparePanel('A', panelA, setPanelA)}
-          {renderComparePanel('B', panelB, setPanelB)}
+        {/* Sections outside the form so Enter in the compare inputs never submits the main search */}
+        <div className="mt-3 space-y-3">
+          <PlaygroundSection title={t('siloPlayground.apiSnippet')}>
+            <SiloAPISnippets
+              appId={appId ?? ''}
+              siloId={siloId ?? ''}
+              siloName={silo?.name}
+              query={searchQuery}
+              limit={searchControls.limit}
+              filterMetadata={filterMetadata as Record<string, unknown> | undefined}
+              searchType={searchControls.searchType}
+              scoreThreshold={searchControls.searchType === 'similarity_score_threshold' ? searchControls.scoreThreshold : undefined}
+              fetchK={searchControls.searchType === 'mmr' ? searchControls.fetchK : undefined}
+              lambdaMult={searchControls.searchType === 'mmr' ? searchControls.lambdaMult : undefined}
+            />
+          </PlaygroundSection>
+
+          {queryHistory.length > 0 && (
+            <PlaygroundSection title={t('siloPlayground.history')} summary={t('siloPlayground.recentQueries', { count: queryHistory.length })}>
+              <ul className="space-y-1">
+                {queryHistory.map((entry, i) => (
+                  <li key={entry.timestamp} className="flex items-center gap-2 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => rerunHistoryEntry(entry)}
+                      className="flex-1 truncate text-left text-fg hover:text-accent hover:underline dark:text-fg-dark dark:hover:text-accent-dark"
+                      title={entry.query}
+                    >
+                      {entry.query || t('siloPlayground.emptyQuery')}
+                    </button>
+                    <span className="shrink-0 text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+                      {new Date(entry.timestamp).toLocaleTimeString(i18n.resolvedLanguage)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => deleteHistoryEntry(i)}
+                      className="shrink-0 text-base leading-none text-fg-tertiary hover:text-error dark:text-fg-tertiary-dark dark:hover:text-error-dark"
+                      title={t('siloPlayground.remove')}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </PlaygroundSection>
+          )}
+
+          <PlaygroundSection title={t('siloPlayground.compareSearches')}>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {renderComparePanel('A', panelA, setPanelA)}
+              {renderComparePanel('B', panelB, setPanelB)}
+            </div>
+          </PlaygroundSection>
+
+          {/* Search Error */}
+          {searchError && <Alert type="error" title={t('siloPlayground.searchError')} message={searchError} />}
         </div>
-      )}
+      </section>
 
       {/* Search Results (single panel) */}
       {!compareMode && searchResults.length > 0 && (
-        <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Search Results ({searchResults.length})
+        <div>
+          <h2 className="mb-3 font-display text-[20px] tracking-[-0.02em] text-ink dark:text-ink-dark">
+            {t('siloPlayground.searchResults', { count: searchResults.length })}
           </h2>
 
           {/* Curator toolbar */}
-          <div className="flex flex-wrap items-center gap-3 mb-4 py-2 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm">
-            <label className="flex items-center gap-1.5 cursor-pointer text-gray-600 select-none">
+          <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface-tint px-3.5 py-2.5 dark:border-line-dark dark:bg-surface-tint-dark">
+            <label className="flex cursor-pointer select-none items-center gap-[9px] text-[13px] text-fg dark:text-fg-dark">
               <input
                 type="checkbox"
                 checked={selectedIds.size > 0 && selectedIds.size === searchResults.length}
@@ -503,31 +501,33 @@ function SiloPlaygroundPage() {
                     setSelectedIds(new Set());
                   }
                 }}
-                className="accent-amber-500"
+                className="h-4 w-4 cursor-pointer accent-ink dark:accent-ink-dark"
               />
-              {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
+              {selectedIds.size > 0 ? t('siloPlayground.selectedCount', { count: selectedIds.size }) : t('siloPlayground.selectAll')}
             </label>
-            {selectedIds.size > 0 && (
-              <button
-                onClick={() => setShowBulkDeleteModal(true)}
-                className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs font-medium"
-              >
-                Delete selected ({selectedIds.size})
-              </button>
-            )}
-            {filterMetadata && Object.keys(filterMetadata).length > 0 && (
-              <button
-                onClick={handleOpenDeleteByFilter}
-                className="px-3 py-1 border border-red-400 text-red-600 rounded hover:bg-red-50 text-xs font-medium"
-              >
-                Delete by filter…
-              </button>
-            )}
-            {reindexMessage && (
-              <span className={`ml-auto text-xs font-medium ${reindexMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-                {reindexMessage.text}
-              </span>
-            )}
+            <div className="flex flex-wrap items-center gap-2.5">
+              {reindexMessage && (
+                <span className={`text-xs font-medium ${reindexMessage.type === 'success' ? 'text-success dark:text-success-dark' : 'text-error dark:text-error-dark'}`}>
+                  {reindexMessage.text}
+                </span>
+              )}
+              {filterMetadata && Object.keys(filterMetadata).length > 0 && (
+                <button
+                  onClick={handleOpenDeleteByFilter}
+                  className="rounded-md border border-error bg-transparent px-[13px] py-[7px] font-display text-[13px] text-error transition-colors hover:bg-error-bg dark:border-error-dark dark:text-error-dark dark:hover:bg-error-bg-dark"
+                >
+                  {t('siloPlayground.deleteByFilter')}
+                </button>
+              )}
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={() => setShowBulkDeleteModal(true)}
+                  className="rounded-md border border-error bg-transparent px-[13px] py-[7px] font-display text-[13px] text-error transition-colors hover:bg-error-bg dark:border-error-dark dark:text-error-dark dark:hover:bg-error-bg-dark"
+                >
+                  {t('siloPlayground.deleteSelected', { count: selectedIds.size })}
+                </button>
+              )}
+            </div>
           </div>
           
           <div className="space-y-4">
@@ -552,84 +552,53 @@ function SiloPlaygroundPage() {
 
       {/* Empty State */}
       {!compareMode && !isSearching && searchResults.length === 0 && hasSearched && !searchError && (
-        <div className="bg-white shadow rounded-lg p-6">
+        <CardApp className="p-6">
           <div className="text-center">
-            <Search className="w-10 h-10 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Results Found</h3>
-            <div className="text-sm text-gray-500 space-y-1 max-w-md mx-auto text-left">
+            <BackgroundImage icon={Search} size={64} iconSize={32} className="mx-auto" />
+            <p className="font-display text-lg font-normal tracking-[-0.02em] text-fg dark:text-fg-dark">{t('siloPlayground.noResultsFound')}</p>
+            <div className="text-sm text-fg-tertiary dark:text-fg-tertiary-dark space-y-1 max-w-md mx-auto text-center">
               {searchControls.searchType === 'similarity_score_threshold' && (
-                <p>⬇️ Try lowering the score threshold (currently {searchControls.scoreThreshold}).</p>
+                <p className="text-sm mt-1">{t('siloPlayground.lowerScoreThreshold', { threshold: searchControls.scoreThreshold })}</p>
               )}
               {filterMetadata && Object.keys(filterMetadata).length > 0 && (
-                <p>🔍 Try removing or relaxing metadata filters.</p>
+                <p className="text-sm mt-1">{t('siloPlayground.relaxMetadataFilters')}</p>
               )}
               {searchControls.limit < 20 && (
-                <p>⬆️ Try increasing Top K (currently {searchControls.limit}).</p>
+                <p className="text-sm mt-1">{t('siloPlayground.increaseTopK', { count: searchControls.limit })}</p>
               )}
-              <p className="text-gray-400 mt-2">
+              <p className="text-sm mt-1">
                 {searchQuery
-                  ? 'No documents matched your query with the current settings.'
-                  : 'The silo may be empty or filters are too restrictive.'}
+                  ? t('siloPlayground.noDocumentsMatched')
+                  : t('siloPlayground.emptySiloOrRestrictiveFilters')}
               </p>
             </div>
           </div>
-        </div>
+        </CardApp>
       )}
-
-      {/* Help Section */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <Info className="w-5 h-5 text-blue-400" />
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-blue-800">
-              How to Use the Playground
-            </h3>
-            <div className="mt-2 text-sm text-blue-700">
-              <p>
-                The playground allows you to test semantic search within your silo. 
-                Enter natural language queries to find relevant documents.
-              </p>
-              <p className="mt-2">
-                <strong>Tips:</strong>
-                <br />
-                • Use natural language (e.g., "What is machine learning?")
-                <br />
-                • Leave empty to browse all available documents
-                <br />
-                • Try different phrasings for better results
-                <br />
-                • Results are ranked by relevance score
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Single delete confirmation modal */}
       <Modal
         isOpen={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
-        title="Delete document"
+        title={t('siloPlayground.deleteDocumentTitle')}
         size="small"
       >
-        <p className="text-sm text-gray-700 mb-4">
-          Are you sure you want to delete this document from the silo? This action cannot be undone.
+        <p className="text-sm text-fg dark:text-fg-dark mb-4">
+          {t('siloPlayground.deleteDocumentConfirmation')}
         </p>
         <div className="flex gap-2 justify-end">
-          <button
+          <ButtonApp
+            label={t('cancel')}
             onClick={() => setDeleteTarget(null)}
-            className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
+            variant="primary"
+            size="medium"
+          />
+          <ButtonApp
+            label={t('delete')}
             onClick={() => void handleDeleteConfirmed()}
-            className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700"
-          >
-            Delete
-          </button>
+            variant="dangerSolid"
+            size="medium"
+          />
         </div>
       </Modal>
 
@@ -637,26 +606,28 @@ function SiloPlaygroundPage() {
       <Modal
         isOpen={showBulkDeleteModal}
         onClose={() => setShowBulkDeleteModal(false)}
-        title={`Delete ${selectedIds.size} document(s)`}
+        title={t('siloPlayground.bulkDeleteTitle', { count: selectedIds.size })}
         size="small"
       >
-        <p className="text-sm text-gray-700 mb-4">
-          You are about to permanently delete <strong>{selectedIds.size}</strong> document(s) from the silo. This action cannot be undone.
+        <p className="text-sm text-fg dark:text-fg-dark mb-4">
+          {t('siloPlayground.bulkDeleteConfirmation', { count: selectedIds.size })}
         </p>
         <div className="flex gap-2 justify-end">
-          <button
+          <ButtonApp
+            label={t('cancel')}
             onClick={() => setShowBulkDeleteModal(false)}
-            className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
+            variant="secondary"
+            size="medium"
+          />
+          <ButtonApp
+            label={bulkDeleteLoading
+              ? t('siloPlayground.deleting')
+              : t('siloPlayground.deleteCount', { count: selectedIds.size })}
             onClick={() => void handleBulkDelete()}
             disabled={bulkDeleteLoading}
-            className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-          >
-            {bulkDeleteLoading ? 'Deleting…' : `Delete ${selectedIds.size}`}
-          </button>
+            variant="dangerSolid"
+            size="medium"
+          />
         </div>
       </Modal>
 
@@ -664,44 +635,46 @@ function SiloPlaygroundPage() {
       <Modal
         isOpen={showDeleteByFilterModal}
         onClose={() => { setShowDeleteByFilterModal(false); setDeleteByFilterConfirmName(''); }}
-        title="Delete by current filter"
+        title={t('siloPlayground.deleteByFilterTitle')}
         size="small"
       >
         {deleteByFilterLoading ? (
-          <p className="text-sm text-gray-600">Counting matching documents…</p>
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('siloPlayground.countingMatchingDocuments')}</p>
         ) : deleteByFilterCount === -1 ? (
-          <p className="text-sm text-red-600">Could not retrieve count. Check filters and try again.</p>
+          <p className="text-sm text-error dark:text-error-dark">{t('siloPlayground.countMatchingFailed')}</p>
         ) : (
           <>
-            <p className="text-sm text-gray-700 mb-3">
-              This will permanently delete{' '}
-              <strong>{deleteByFilterCount ?? '…'}</strong> document(s) matching the current filter.
-              This action cannot be undone.
+            <p className="text-sm text-fg dark:text-fg-dark mb-3">
+              {deleteByFilterCount === null
+                ? t('siloPlayground.deleteByFilterCountUnknown')
+                : t('siloPlayground.deleteByFilterConfirmation', { count: deleteByFilterCount })}
             </p>
-            <p className="text-sm text-gray-600 mb-2">
-              Type the silo name <strong>{silo.name}</strong> to confirm:
+            <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark mb-2">
+              {t('siloPlayground.typeSiloNameToConfirm')} <strong>{silo.name}</strong>:
             </p>
-            <input
+            <FormField
+              id="delete-by-filter-confirm-name"
               type="text"
               value={deleteByFilterConfirmName}
               onChange={(e) => setDeleteByFilterConfirmName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-red-400"
+              ariaLabel={t('siloPlayground.typeSiloNameToConfirm')}
               placeholder={silo.name}
+              className="mb-4"
             />
             <div className="flex gap-2 justify-end">
-              <button
+              <ButtonApp
+                label={t('cancel')}
                 onClick={() => { setShowDeleteByFilterModal(false); setDeleteByFilterConfirmName(''); }}
-                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
+                variant="secondary"
+                size="medium"
+              />
+              <ButtonApp
+                label={bulkDeleteLoading ? t('siloPlayground.deleting') : t('siloPlayground.deleteAllMatching')}
                 onClick={() => void handleDeleteByFilterConfirmed()}
                 disabled={deleteByFilterConfirmName !== silo.name || bulkDeleteLoading}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-              >
-                {bulkDeleteLoading ? 'Deleting…' : 'Delete all matching'}
-              </button>
+                variant="dangerSolid"
+                size="medium"
+              />
             </div>
           </>
         )}

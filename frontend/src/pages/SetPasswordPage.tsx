@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { AlertTriangle } from 'lucide-react';
 import { authService } from '../services/auth';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import { FormField } from '../components/ui/FormField';
 
 export interface SetPasswordPageProps {
   readonly className?: string;
@@ -9,6 +13,7 @@ export interface SetPasswordPageProps {
 const MIN_PASSWORD_LENGTH = 12;
 
 function SetPasswordPage() {
+  const { t } = useTranslation('common');
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';
 
@@ -36,10 +41,10 @@ function SetPasswordPage() {
 
   const validationError = (): string | null => {
     if (password.length < MIN_PASSWORD_LENGTH) {
-      return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+      return t('setPasswordPage.passwordTooShort', { count: MIN_PASSWORD_LENGTH });
     }
     if (password !== confirm) {
-      return 'Passwords do not match.';
+      return t('setPasswordPage.passwordsDoNotMatch');
     }
     return null;
   };
@@ -59,7 +64,7 @@ function SetPasswordPage() {
       await authService.setPassword(token, password);
       setSuccess(true);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Set password failed. The link may have expired.');
+      setError(err instanceof Error ? err.message : t('setPasswordPage.setFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -67,31 +72,30 @@ function SetPasswordPage() {
 
   if (!token) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 via-slate-50 to-blue-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 px-4">
-        <main className="max-w-md w-full bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-8 text-center">
+      <div className="flex items-center justify-center min-h-screen px-4 text-fg bg-gradient-to-b from-canvas-alt to-surface dark:text-fg-dark dark:from-canvas-alt-dark dark:to-surface-dark">
+        <main className="max-w-md w-full rounded-lg border px-[30px] py-8 bg-surface border-line dark:bg-surface-dark dark:border-line-dark text-center">
           <div role="status" aria-live="polite">
-            <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4" aria-hidden="true">
-              <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+            <div className="w-12 h-12 rounded-full border bg-error-bg border-error-border dark:bg-error-bg-dark dark:border-error-border-dark flex items-center justify-center mx-auto mb-4" aria-hidden="true">
+              <svg className="w-6 h-6 text-error dark:text-error-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
               </svg>
             </div>
             <h1
               ref={invalidHeadingRef}
               tabIndex={-1}
-              className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2 focus:outline-none"
+              className="font-display text-xl font-normal tracking-[-0.02em] text-fg dark:text-fg-dark mb-2 focus:outline-none"
             >
-              Invalid Link
+              {t('setPasswordPage.invalidLinkTitle')}
             </h1>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-              This set-password link is missing a token. Please use the full link from your invitation email.
+            <p className="text-[13.5px] text-fg-tertiary dark:text-fg-tertiary-dark mb-6">
+              {t('setPasswordPage.missingTokenMessage')}
             </p>
           </div>
           <Link
             to="/login"
-            className="inline-flex items-center gap-2 text-sm font-medium hover:underline"
-            style={{ color: 'var(--color-primary)' }}
+            className="inline-flex items-center gap-2 text-sm font-medium text-fg underline decoration-accent underline-offset-[3px] hover:text-accent dark:text-fg-dark dark:decoration-accent-dark dark:hover:text-accent-dark"
           >
-            Back to sign in
+            {t('setPasswordPage.backToSignIn')}
           </Link>
         </main>
       </div>
@@ -100,30 +104,30 @@ function SetPasswordPage() {
 
   if (success) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 via-slate-50 to-blue-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 px-4">
-        <main className="max-w-md w-full bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-8 text-center">
+      <div className="flex items-center justify-center min-h-screen px-4 text-fg bg-gradient-to-b from-canvas-alt to-surface dark:text-fg-dark dark:from-canvas-alt-dark dark:to-surface-dark">
+        <main className="max-w-md w-full rounded-md border px-[30px] py-8 bg-surface border-line dark:bg-surface-dark dark:border-line-dark text-center">
           <div role="status" aria-live="polite">
-            <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-4" aria-hidden="true">
-              <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+            <div className="w-12 h-12 rounded-full border bg-success-bg border-success-border dark:bg-success-bg-dark dark:border-success-border-dark flex items-center justify-center mx-auto mb-4" aria-hidden="true">
+              <svg className="w-6 h-6 text-success dark:text-success-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
               </svg>
             </div>
             <h1
               ref={successHeadingRef}
               tabIndex={-1}
-              className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2 focus:outline-none"
+              className="font-display text-xl font-normal tracking-[-0.02em] text-fg dark:text-fg-dark mb-2 focus:outline-none"
             >
-              Password Set
+              {t('setPasswordPage.successTitle')}
             </h1>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-              Your password has been set successfully. You can now sign in.
+            <p className="text-[13.5px] text-fg-tertiary dark:text-fg-tertiary-dark mb-6">
+              {t('setPasswordPage.successMessage')}
             </p>
           </div>
           <Link
             to="/login"
-            className="inline-flex items-center justify-center w-full px-4 py-3 rounded-xl font-semibold text-white shadow-lg btn-login-gradient"
+            className="inline-flex items-center justify-center w-full px-4 py-3 rounded-lg text-[15px] font-medium border border-transparent bg-ink text-ink-on hover:bg-ink-hover dark:bg-ink-dark dark:text-ink-on-dark dark:hover:bg-ink-hover-dark transition-colors"
           >
-            Go to sign in
+            {t('setPasswordPage.goToSignIn')}
           </Link>
         </main>
       </div>
@@ -131,12 +135,12 @@ function SetPasswordPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 via-slate-50 to-blue-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 px-4">
-      <main className="max-w-md w-full bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-8">
+    <div className="flex items-center justify-center min-h-screen px-4 text-fg bg-gradient-to-b from-canvas-alt to-surface dark:text-fg-dark dark:from-canvas-alt-dark dark:to-surface-dark">
+      <main className="max-w-md w-full rounded-md border px-[30px] py-8 bg-surface border-line dark:bg-surface-dark dark:border-line-dark">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Set your password</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Choose a strong password to activate your account.
+          <h1 className="font-display text-2xl font-normal tracking-[-0.02em] text-fg dark:text-fg-dark">{t('setPasswordPage.title')}</h1>
+          <p className="mt-1.5 text-[13.5px] text-fg-tertiary dark:text-fg-tertiary-dark">
+            {t('setPasswordPage.description')}
           </p>
         </div>
 
@@ -145,94 +149,75 @@ function SetPasswordPage() {
           role="alert"
           aria-live="assertive"
           id="set-password-error"
-          className={error ? 'mb-4 flex items-start gap-3 rounded-xl px-4 py-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800' : 'sr-only'}
+          className={error ? 'mb-4 flex rounded-lg p-4 bg-error-bg border border-error-border dark:bg-error-bg-dark dark:border-error-border-dark' : 'sr-only'}
         >
           {error && (
             <>
-              <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-              </svg>
-              <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+              <span className="mr-3 shrink-0 text-error dark:text-error-dark" aria-hidden="true">
+                <AlertTriangle className="w-5 h-5" />
+              </span>
+              <p className="flex-1 text-sm text-error dark:text-error-dark">{error}</p>
             </>
           )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5" noValidate>
           {/* Hidden username field — helps password managers; email unavailable on token-based flow so value is omitted */}
-          <input
+          <FormField
+            id="username"
             type="email"
             autoComplete="username"
-            aria-hidden="true"
-            tabIndex={-1}
             readOnly
+            ariaHidden
+            tabIndex={-1}
             className="sr-only"
           />
 
-          <div>
-            <label htmlFor="new-password" className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
-              New Password
-            </label>
-            <input
-              id="new-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              aria-required="true"
-              aria-invalid={error !== null}
-              aria-describedby="password-hint set-password-error"
-              autoComplete="new-password"
-              disabled={isLoading}
-              className="input-login w-full px-4 py-3 rounded-xl border bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 placeholder-slate-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-            />
-            <p id="password-hint" className="mt-1.5 text-xs text-slate-600 dark:text-slate-300">
-              Minimum {MIN_PASSWORD_LENGTH} characters
-            </p>
-          </div>
+          <FormField
+            id="new-password"
+            label={t('setPasswordPage.newPassword')}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            ariaRequired
+            ariaInvalid={error !== null}
+            ariaDescribedBy="set-password-error"
+            autoComplete="new-password"
+            disabled={isLoading}
+            helpText={t('setPasswordPage.passwordMinLength', { count: MIN_PASSWORD_LENGTH })}
+          />
 
-          <div>
-            <label htmlFor="confirm-password" className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
-              Confirm Password
-            </label>
-            <input
-              id="confirm-password"
-              type="password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              required
-              aria-required="true"
-              aria-invalid={error !== null}
-              aria-describedby="set-password-error"
-              autoComplete="new-password"
-              disabled={isLoading}
-              className="input-login w-full px-4 py-3 rounded-xl border bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 placeholder-slate-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-            />
-          </div>
+          <FormField
+            id="confirm-password"
+            label={t('setPasswordPage.confirmPassword')}
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            required
+            ariaRequired
+            ariaInvalid={error !== null}
+            ariaDescribedBy="set-password-error"
+            autoComplete="new-password"
+            disabled={isLoading}
+          />
 
-          <button
+          <ButtonApp
             type="submit"
-            disabled={isLoading || !password || !confirm}
-            className="btn-login-gradient w-full flex items-center justify-center px-4 py-3 rounded-xl font-semibold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? (
-              <>
-                <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Setting password...
-              </>
-            ) : 'Set password'}
-          </button>
+            label={isLoading ? t('setPasswordPage.submitting') : t('setPasswordPage.submit')}
+            disabled={!password || !confirm}
+            loading={isLoading}
+            size="spacious"
+            className="w-full"
+          />
         </form>
 
-        <p className="mt-6 text-sm text-center text-slate-500 dark:text-slate-400">
+        <p className="mt-6 text-sm text-center text-fg-tertiary dark:text-fg-tertiary-dark">
           <Link
             to="/login"
-            className="hover:underline"
-            style={{ color: 'var(--color-primary)' }}
+            className="font-medium text-fg underline decoration-accent underline-offset-[3px] hover:text-accent dark:text-fg-dark dark:decoration-accent-dark dark:hover:text-accent-dark"
           >
-            Back to sign in
+            {t('setPasswordPage.backToSignIn')}
           </Link>
         </p>
       </main>

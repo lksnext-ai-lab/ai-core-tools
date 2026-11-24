@@ -11,6 +11,7 @@ from fastapi import UploadFile, HTTPException
 from tools.PDFTools import extract_text_from_pdf, convert_pdf_to_images, check_pdf_has_text
 from utils.logger import get_logger
 from utils.log_safety import sanitize_for_log
+from tools.sandbox.chat_guard import describe_exc
 from utils.path_safety import UnsafePathError, resolve_within
 from utils.async_files import read_json, read_text, write_json, write_temp_file, write_text
 
@@ -1083,6 +1084,31 @@ class FileManagementService:
         if not removed:
             logger.warning("Could not remove attachment %s after a failed upload", sanitize_for_log(file_id))
 
+    async def remove_all_attached_files(
+        self,
+        agent_id: int,
+        user_context: Optional[Dict] = None,
+        conversation_id: Optional[str] = None,
+    ) -> int:
+        """Remove every attached file of a session (optionally one conversation's); returns how many were listed.
+
+        Used by the playground reset (the App Chat reset removes only a snapshot of ids, see ``InternalChatService``). A failure on one file is logged and does not
+        stop the others.
+        """
+        attached_files = await self.list_attached_files(agent_id, user_context, conversation_id)
+        for file_data in attached_files:
+            try:
+                await self.remove_file(
+                    file_id=file_data['file_id'],
+                    agent_id=agent_id,
+                    user_context=user_context,
+                    conversation_id=conversation_id,
+                )
+                logger.info(f"Removed file {file_data['filename']} during conversation reset")
+            except Exception as e:
+                logger.error(f"Error removing file {file_data['file_id']} during reset: {str(e)}")
+        return len(attached_files)
+
     async def remove_files(
         self,
         file_ids: List[str],
@@ -1105,15 +1131,18 @@ class FileManagementService:
         """Delete every file of a conversation: its session metadata and its working directory."""
         session_key = self._get_session_key(agent_id, user_context, conversation_id)
         self._files.pop(session_key, None)
-        paths = [os.path.join(self._persistent_dir, session_key)]
+        targets = [(self._persistent_dir, session_key)]
         if conversation_id:
-            paths.append(os.path.join(self._tmp_base_folder, "conversations", str(conversation_id)))
-        for path in paths:
+            targets.append((os.path.join(self._tmp_base_folder, "conversations"), str(conversation_id)))
+        for base_dir, part in targets:
             try:
-                if os.path.isdir(path):
+                path = resolve_within(base_dir, part)
+                if path != os.path.realpath(base_dir) and os.path.isdir(path):
                     shutil.rmtree(path)
+            except UnsafePathError:
+                logger.warning("Refusing to delete conversation storage outside %s", sanitize_for_log(base_dir))
             except Exception as e:
-                logger.error(f"Error deleting conversation storage {path}: {e}")
+                logger.error("Error deleting conversation storage under %s: %s", sanitize_for_log(base_dir), e)
 
     def delete_agent_storage(self, agent_id: int, conversation_ids: List[int]) -> None:
         """Delete every file stored for an agent: all its sessions and its conversations' working directories."""
@@ -1259,7 +1288,7 @@ class FileManagementService:
             return newly_registered
 
         except Exception as e:
-            logger.error("sync_output_files error: %s", e)
+            logger.error("sync_output_files error: %s", describe_exc(e))
             return []
 
     async def resolve_chat_files(

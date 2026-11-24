@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { apiService, type ScheduledTask } from '../services/api';
 import { ScheduledTaskOutputView, type ScheduledTaskOutputSource } from '../components/scheduled-tasks/ScheduledTaskOutputView';
@@ -6,6 +7,7 @@ import { OutputDeliveriesPanel } from '../components/scheduled-tasks/OutputDeliv
 
 /** Read-only result of a run (/runs/:runId) or of a continuous conversation (/conversation). */
 export default function ScheduledTaskRunPage() {
+  const { t } = useTranslation('common');
   const { appId, taskId, runId } = useParams();
   const numericAppId = Number.parseInt(appId ?? '0', 10);
   const numericTaskId = Number.parseInt(taskId ?? '0', 10);
@@ -26,10 +28,10 @@ export default function ScheduledTaskRunPage() {
   return (
     <>
     <ScheduledTaskOutputView
-      title={task?.name ?? 'Tarea programada'}
-      subtitle={numericRunId === null ? 'Respuestas de la conversación continua' : 'Resultado de la ejecución'}
+      title={task?.name ?? t('scheduledTaskDetailPage.results.taskFallback')}
+      subtitle={numericRunId === null ? t('scheduledTaskDetailPage.results.conversationSubtitle') : t('scheduledTaskDetailPage.results.runSubtitle')}
       backHref={`/apps/${appId}/scheduled-tasks/${taskId}`}
-      backLabel="Volver a la tarea"
+      backLabel={t('scheduledTaskDetailPage.results.backToTask')}
       source={source}
       timeline={numericRunId === null}
     />

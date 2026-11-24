@@ -4,7 +4,7 @@ import { Sidebar } from '../sidebar/Sidebar';
 import { Footer } from '../footer/Footer';
 import { PageTitle } from '../header/PageTitle';
 import QuotaWarningBanner from '../QuotaWarningBanner';
-import type { NavigationConfig } from '../../core/types';
+import type { NavigationConfig, OrganizationConfig } from '../../core/types';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -14,6 +14,7 @@ interface LayoutProps {
     children?: React.ReactNode;
     title?: string;
     logoUrl?: string;
+    organization?: OrganizationConfig;
   };
   sidebarProps?: {
     className?: string;
@@ -54,7 +55,7 @@ export const Layout: React.FC<LayoutProps> = ({
   showFooter = true
 }) => {
   return (
-    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
+    <div className="h-screen overflow-hidden bg-canvas text-fg font-sans antialiased flex flex-col dark:bg-canvas-dark dark:text-fg-dark">
       {/* Full-width Header */}
       {showHeader && (
         <Header
@@ -80,11 +81,13 @@ export const Layout: React.FC<LayoutProps> = ({
           />
         )}
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden min-h-0 min-w-0">
+        {/* Main Content Area — `relative` anchors overlay SidePanels between sidebar and header */}
+        <div className="relative flex-1 flex flex-col overflow-hidden min-h-0 min-w-0">
           {/* Page Content — owns its own scroll so the sidebar never pushes it */}
-          <main className={`flex-1 min-h-0 overflow-auto p-6 ${mainProps.className || ''}`}>
-            {children}
+          <main className={`flex-1 min-h-0 overflow-auto bg-surface dark:bg-surface-dark px-4 py-6 sm:px-6 lg:px-10 lg:py-10 ${mainProps.className || ''}`}>
+            <div className="mx-auto w-full max-w-[1680px]">
+              {children}
+            </div>
           </main>
           
           {/* Footer */}

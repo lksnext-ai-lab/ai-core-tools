@@ -444,45 +444,6 @@ the corresponding variables from `frontend/.env` are used. Do not set
 `VITE_OIDC_ENABLED=false` in the runtime configuration unless OIDC is
 intentionally disabled.
 
-## Library Publishing
-
-### Build Library
-
-Build the base library for npm publishing:
-
-```bash
-cd frontend
-npm run build:lib
-```
-
-**Output**: `frontend/dist-lib/` - Library build artifacts
-
-### Publish to npm
-
-```bash
-# Manual publish
-cd frontend
-npm publish
-
-# Or use script
-./deploy/scripts/publish-library.sh
-```
-
-### Deploy Base Library
-
-Automated deployment script:
-
-```bash
-./deploy/scripts/deploy-base-library.sh
-```
-
-**What it does**:
-1. Bumps version in `package.json`
-2. Builds library (`npm run build:lib`)
-3. Publishes to npm
-4. Tags git commit
-5. Pushes changes
-
 ## CI/CD
 
 ### Jenkinsfile

@@ -277,6 +277,13 @@ async def _shutdown_workers(app: FastAPI) -> None:
 
 async def _shutdown_shared_services() -> None:
     try:
+        from services.chat_attachment_service import shutdown_indexing_executor
+
+        shutdown_indexing_executor()
+    except Exception as exc:
+        logger.warning("Chat indexing executor shutdown failed: %s", exc, exc_info=True)
+
+    try:
         from services.a2a_server.runtime import close_runtime
 
         await close_runtime()

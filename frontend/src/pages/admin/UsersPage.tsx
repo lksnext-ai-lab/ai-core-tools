@@ -1,9 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Crown, Check, X, Ban, Trash2, RefreshCcw, UserPlus, Link, UserCheck, Eye, Pencil } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { adminService, OwnedAppsError } from '../../services/admin';
 import type { User, UserListResponse } from '../../services/admin';
 import ActionDropdown from '../../components/ui/ActionDropdown';
 import Alert from '../../components/ui/Alert';
+import { Badge } from '../../components/ui/Badge';
+import { ButtonApp } from '../../components/ui/ButtonApp';
+import FormField from '../../components/ui/FormField';
+import Table from '../../components/ui/Table';
+import TablePagination from '../../components/ui/TablePagination';
 import CreateLocalUserModal from '../../components/ui/CreateLocalUserModal';
 import OneTimeLinkModal from '../../components/ui/OneTimeLinkModal';
 import DeleteUserDialog from '../../components/admin/DeleteUserDialog';
@@ -12,6 +18,9 @@ import { useUser } from '../../contexts/UserContext';
 import { useApiMutation } from '../../hooks/useApiMutation';
 import { useDeploymentMode } from '../../contexts/DeploymentModeContext';
 import { errorMessage } from '../../constants/messages';
+import { LoadingState } from '../../components/ui/LoadingState';
+import Title from '../../components/ui/Title';
+
 
 interface ResetLinkState {
   readonly token: string;
@@ -19,6 +28,7 @@ interface ResetLinkState {
 }
 
 function UsersPage() {
+  const { t, i18n } = useTranslation('common');
   const confirm = useConfirm();
   const mutate = useApiMutation();
   const { authMode, isLoading: modeLoading } = useDeploymentMode();
@@ -56,11 +66,11 @@ function UsersPage() {
       setTotalUsers(response.total);
     } catch (err) {
       console.error('Failed to load users:', err);
-      setError(`Failed to load users: ${errorMessage(err, 'Unknown error')}`);
+      setError(t('userManagement.loadFailed', { error: errorMessage(err, t('userManagement.unknownError')) }));
     } finally {
       setLoading(false);
     }
-  }, [currentPage, perPage, searchQuery]);
+  }, [currentPage, perPage, searchQuery, t]);
 
   useEffect(() => {
     void loadUsers();
@@ -76,10 +86,10 @@ function UsersPage() {
     }
 
     const ok = await confirm({
-      title: 'Delete user?',
-      message: `Delete ${target.name || target.email}? This action cannot be undone.`,
+      title: t('userManagement.deleteTitle'),
+      message: t('userManagement.deleteMessage', { name: target.name || target.email }),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('userManagement.delete'),
     });
     if (!ok) return;
 
@@ -87,11 +97,11 @@ function UsersPage() {
     try {
       await adminService.deleteUser(userId);
       void mutate(
-        () => Promise.resolve({ message: 'User deleted' }),
+        () => Promise.resolve({ message: t('userManagement.userDeleted') }),
         {
-          loading: 'Deleting user…',
-          success: 'User deleted',
-          error: (err) => errorMessage(err, 'Failed to delete user'),
+          loading: t('userManagement.deletingUser'),
+          success: t('userManagement.userDeleted'),
+          error: (err) => errorMessage(err, t('userManagement.deleteFailed')),
         },
       );
       await loadUsers();
@@ -104,9 +114,9 @@ function UsersPage() {
       void mutate(
         () => Promise.reject(err),
         {
-          loading: 'Deleting user…',
-          success: 'User deleted',
-          error: (e) => errorMessage(e, 'Failed to delete user'),
+          loading: t('userManagement.deletingUser'),
+          success: t('userManagement.userDeleted'),
+          error: (e) => errorMessage(e, t('userManagement.deleteFailed')),
         },
       );
     } finally {
@@ -119,9 +129,9 @@ function UsersPage() {
     const result = await mutate(
       () => adminService.activateUser(userId),
       {
-        loading: 'Activating user…',
-        success: (data) => data?.message ?? 'User activated',
-        error: (err) => errorMessage(err, 'Failed to activate user'),
+        loading: t('userManagement.activatingUser'),
+        success: t('userManagement.userActivated'),
+        error: (err) => errorMessage(err, t('userManagement.activateFailed')),
       },
     );
     setActivatingUser(null);
@@ -132,10 +142,10 @@ function UsersPage() {
 
   async function handleDeactivateUser(userId: number, userName: string) {
     const ok = await confirm({
-      title: 'Deactivate user?',
-      message: `Deactivate ${userName}? They will not be able to access the system until reactivated.`,
+      title: t('userManagement.deactivateTitle'),
+      message: t('userManagement.deactivateMessage', { name: userName }),
       variant: 'warning',
-      confirmLabel: 'Deactivate',
+      confirmLabel: t('userManagement.deactivate'),
     });
     if (!ok) return;
 
@@ -143,9 +153,9 @@ function UsersPage() {
     const result = await mutate(
       () => adminService.deactivateUser(userId),
       {
-        loading: 'Deactivating user…',
-        success: (data) => data?.message ?? 'User deactivated',
-        error: (err) => errorMessage(err, 'Failed to deactivate user'),
+        loading: t('userManagement.deactivatingUser'),
+        success: t('userManagement.userDeactivated'),
+        error: (err) => errorMessage(err, t('userManagement.deactivateFailed')),
       },
     );
     setActivatingUser(null);
@@ -156,10 +166,10 @@ function UsersPage() {
 
   async function handleResetQuota(userId: number, userLabel: string) {
     const ok = await confirm({
-      title: 'Reset marketplace quota?',
-      message: `Reset the marketplace call quota for ${userLabel}? Their current-month counter will be set to 0, allowing them to make up to the full quota again.`,
+      title: t('userManagement.resetQuotaTitle'),
+      message: t('userManagement.resetQuotaMessage', { name: userLabel }),
       variant: 'warning',
-      confirmLabel: 'Reset quota',
+      confirmLabel: t('userManagement.resetQuota'),
     });
     if (!ok) return;
 
@@ -167,9 +177,9 @@ function UsersPage() {
     await mutate(
       () => adminService.resetUserMarketplaceQuota(userId),
       {
-        loading: 'Resetting quota…',
-        success: (data) => data?.message ?? `Marketplace quota reset for ${userLabel}`,
-        error: (err) => errorMessage(err, 'Failed to reset marketplace quota'),
+        loading: t('userManagement.resettingQuota'),
+        success: t('userManagement.resetQuotaSuccess', { name: userLabel }),
+        error: (err) => errorMessage(err, t('userManagement.resetQuotaFailed')),
       },
     );
     setResettingQuota(null);
@@ -181,26 +191,34 @@ function UsersPage() {
       const result = await adminService.issueResetLink(userId);
       setResetLinkState({ token: result.set_password_token, expiresAt: result.expires_at });
     } catch (err) {
-      setError(`Failed to issue reset link: ${errorMessage(err, 'Unknown error')}`);
+      setError(t('userManagement.resetLinkFailed', { error: errorMessage(err, t('userManagement.unknownError')) }));
     } finally {
       setIssuingResetLink(null);
     }
   }
 
   async function handleSetPlatformRole(userId: number, role: 'viewer' | 'editor' | 'admin', userName: string) {
-    const labels: Record<string, string> = { viewer: 'Viewer', editor: 'Editor', admin: 'Admin' };
+    const labels = {
+      viewer: t('userManagement.roleViewer'),
+      editor: t('userManagement.roleEditor'),
+      admin: t('userManagement.roleAdmin'),
+    };
 
     const target = users.find((u) => u.user_id === userId);
     const ownedApps = target?.owned_apps_count ?? 0;
     const isDowngradeWithApps = role === 'viewer' && ownedApps > 0;
 
     const ok = await confirm({
-      title: `Set role to ${labels[role]}?`,
+      title: t('userManagement.setRoleTitle', { role: labels[role] }),
       message: isDowngradeWithApps
-        ? `${userName} owns ${ownedApps} app${ownedApps !== 1 ? 's' : ''}. As a viewer they will no longer be able to modify them, but will retain ownership. Are you sure you want to downgrade their role to Viewer?`
-        : `Change ${userName}'s platform role to ${labels[role]}?`,
+        ? t('userManagement.roleDowngradeWithApps', {
+            name: userName,
+            count: ownedApps,
+            appLabel: t(ownedApps === 1 ? 'userManagement.appSingular' : 'userManagement.appPlural'),
+          })
+        : t('userManagement.changeRoleMessage', { name: userName, role: labels[role] }),
       variant: isDowngradeWithApps ? 'warning' : undefined,
-      confirmLabel: 'Confirm',
+      confirmLabel: t('userManagement.confirm'),
     });
     if (!ok) return;
 
@@ -208,9 +226,9 @@ function UsersPage() {
     const result = await mutate(
       () => adminService.setPlatformRole(userId, role),
       {
-        loading: 'Updating role…',
-        success: (data) => data?.message ?? 'Role updated',
-        error: (err) => errorMessage(err, 'Failed to update role'),
+        loading: t('userManagement.updatingRole'),
+        success: t('userManagement.roleUpdated'),
+        error: (err) => errorMessage(err, t('userManagement.updateRoleFailed')),
       },
     );
     setSettingRole(null);
@@ -226,10 +244,14 @@ function UsersPage() {
 
   if (loading && users.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12" role="status">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" aria-hidden="true"></div>
-        <span className="ml-2">Loading users...</span>
-      </div>
+      <div className="space-y-6">
+              {/* Page Header */}
+              <div className="flex items-center justify-between">
+                <Title variant='titPrincipal' titulo={t('userManagement.title')} subtitulo={t('userManagement.subtitle')}></Title>
+              </div>
+      
+              <LoadingState variant="page" message={t('userManagement.loading')} />
+            </div>
     );
   }
 
@@ -238,251 +260,187 @@ function UsersPage() {
       {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
 
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">User Management</h1>
-          <p className="text-gray-600 dark:text-slate-400">Manage all users in the system</p>
-        </div>
+        <Title variant='titPrincipal' titulo={t('userManagement.title')} subtitulo={t('userManagement.subtitle')}></Title>
 
         {isLocalMode && (
-          <button
-            type="button"
+          <ButtonApp
+            label={t('userManagement.createUser')}
+            variant="primary"
+            size="medium"
             onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            <UserPlus className="w-4 h-4" aria-hidden="true" />
-            Create user
-          </button>
+            icon={<UserPlus className="w-4 h-4" aria-hidden="true" />}
+          />
         )}
       </div>
 
-      <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
+      <div>
         <form onSubmit={handleSearch} className="flex gap-4">
           <div className="flex-1">
-            <label htmlFor="user-search" className="sr-only">Search users</label>
-            <input
+            <FormField
+              label={t('userManagement.searchUsers')}
+              labelClassName="sr-only"
               id="user-search"
               type="text"
-              placeholder="Search by name or email..."
+              placeholder={t('userManagement.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          <button
+          <ButtonApp
             type="submit"
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            Search
-          </button>
+            label={t('userManagement.search')}
+            variant="primary"
+            size="small"
+          />
         </form>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 rounded-lg shadow overflow-visible">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
-            Users ({totalUsers} total)
+      <div>
+        <div className="py-4">
+          <h2 className="font-display text-lg font-normal text-fg dark:text-fg-dark flex items-center">
+            {t('userManagement.totalUsers', { count: totalUsers })}
           </h2>
         </div>
 
-        <div className="overflow-x-auto overflow-visible">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
-            <thead className="bg-gray-50 dark:bg-slate-700">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                  User
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                  Role
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                  Apps
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                  API Keys
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                  Created
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
-              {users.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center">
-                    <div className="text-gray-500 dark:text-slate-400">
-                      <p className="text-lg font-medium">No users found</p>
-                      <p className="text-sm mt-1">
-                        {searchQuery ? 'Try adjusting your search terms.' : 'There are no users in the system yet.'}
-                      </p>
-                    </div>
-                  </td>
-                </tr>
+        <Table
+          data={users}
+          stickyEdgeColumns
+          keyExtractor={(user) => user.user_id}
+          columns={[
+            {
+              header: t('userManagement.user'),
+              render: (user) => (
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-fg dark:text-fg-dark">
+                      {user.name || t('userManagement.noName')}
+                    </span>
+                    {user.is_omniadmin && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300">
+                        <Crown className="w-3 h-3 mr-1" aria-hidden="true" /> {t('userManagement.omniadmin')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{user.email}</div>
+                </div>
+              ),
+            },
+            {
+              header: t('userManagement.role'),
+              render: (user) => user.platform_role === 'admin' ? (
+                <Badge label={t('userManagement.roleAdmin')} variant="success" icon={<Crown className="w-3 h-3" aria-hidden="true" />} />
+              ) : user.platform_role === 'editor' ? (
+                <Badge label={t('userManagement.roleEditor')} variant="info" icon={<Pencil className="w-3 h-3" aria-hidden="true" />} />
               ) : (
-                users.map((user) => (
-                  <tr key={user.user_id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-gray-900 dark:text-slate-100">
-                            {user.name || 'No name'}
-                          </span>
-                          {user.is_omniadmin && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300">
-                              <Crown className="w-3 h-3 mr-1" aria-hidden="true" /> Omniadmin
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-sm text-gray-500 dark:text-slate-400">{user.email}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {user.platform_role === 'admin' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300">
-                          <Crown className="w-3 h-3 mr-1" aria-hidden="true" /> Admin
-                        </span>
-                      ) : user.platform_role === 'editor' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
-                          <Pencil className="w-3 h-3 mr-1" aria-hidden="true" /> Editor
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 dark:bg-slate-700 dark:text-slate-300">
-                          <Eye className="w-3 h-3 mr-1" aria-hidden="true" /> Viewer
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {user.is_active ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
-                          <Check className="w-3 h-3 mr-1" aria-hidden="true" /> Active
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">
-                          <X className="w-3 h-3 mr-1" aria-hidden="true" /> Inactive
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-slate-100">
-                      {user.owned_apps_count}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-slate-100">
-                      {user.api_keys_count}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-slate-400">
-                      {new Date(user.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {user.is_omniadmin ? (
-                        <span className="text-xs text-gray-500 dark:text-slate-500 italic">Protected account</span>
-                      ) : user.email === currentUser?.email ? (
-                        <span className="text-xs text-gray-500 dark:text-slate-500 italic">Your account</span>
-                      ) : (
-                        <ActionDropdown
-                          triggerAriaLabel={`Actions for ${user.name || user.email}`}
-                          actions={[
-                            ...(user.platform_role !== 'viewer' ? [{
-                              label: settingRole === user.user_id ? 'Setting...' : 'Set as Viewer',
-                              onClick: () => { void handleSetPlatformRole(user.user_id, 'viewer', user.name || user.email); },
-                              icon: <Eye className="w-4 h-4" />,
-                              variant: 'default' as const,
-                              disabled: settingRole === user.user_id,
-                            }] : []),
-                            ...(user.platform_role !== 'editor' ? [{
-                              label: settingRole === user.user_id ? 'Setting...' : 'Set as Editor',
-                              onClick: () => { void handleSetPlatformRole(user.user_id, 'editor', user.name || user.email); },
-                              icon: <Pencil className="w-4 h-4" />,
-                              variant: 'default' as const,
-                              disabled: settingRole === user.user_id,
-                            }] : []),
-                            ...(user.platform_role !== 'admin' ? [{
-                              label: settingRole === user.user_id ? 'Setting...' : 'Set as Admin',
-                              onClick: () => { void handleSetPlatformRole(user.user_id, 'admin', user.name || user.email); },
-                              icon: <UserCheck className="w-4 h-4" />,
-                              variant: 'default' as const,
-                              disabled: settingRole === user.user_id,
-                            }] : []),
-                            ...(user.is_active ? [
-                              {
-                                label: activatingUser === user.user_id ? 'Deactivating...' : 'Deactivate',
-                                onClick: () => { void handleDeactivateUser(user.user_id, user.name || user.email); },
-                                icon: <Ban className="w-4 h-4" />,
-                                variant: 'warning' as const,
-                                disabled: activatingUser === user.user_id,
-                              },
-                            ] : [
-                              {
-                                label: activatingUser === user.user_id ? 'Activating...' : 'Activate',
-                                onClick: () => { void handleActivateUser(user.user_id); },
-                                icon: <Check className="w-4 h-4" />,
-                                variant: 'success' as const,
-                                disabled: activatingUser === user.user_id,
-                              },
-                            ]),
-                            {
-                              label: resettingQuota === user.user_id ? 'Resetting...' : 'Reset Quota',
-                              onClick: () => { void handleResetQuota(user.user_id, user.name || user.email); },
-                              icon: <RefreshCcw className="w-4 h-4" />,
-                              variant: 'warning' as const,
-                              disabled: resettingQuota === user.user_id,
-                            },
-                            ...(isLocalMode ? [
-                              {
-                                label: issuingResetLink === user.user_id ? 'Generating...' : 'Reset password link',
-                                onClick: () => { void handleIssueResetLink(user.user_id); },
-                                icon: <Link className="w-4 h-4" />,
-                                variant: 'default' as const,
-                                disabled: issuingResetLink === user.user_id,
-                              },
-                            ] : []),
-                            {
-                              label: deletingUser === user.user_id ? 'Deleting...' : 'Delete',
-                              onClick: () => { void handleDeleteUser(user.user_id); },
-                              icon: <Trash2 className="w-4 h-4" />,
-                              variant: 'danger' as const,
-                              disabled: deletingUser === user.user_id,
-                            },
-                          ]}
-                          size="sm"
-                        />
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                <Badge label={t('userManagement.roleViewer')} variant="warning" icon={<Eye className="w-3 h-3" aria-hidden="true" />} />
+              ),
+            },
+            {
+              header: t('userManagement.status'),
+              render: (user) => user.is_active ? (
+                <Badge label={t('userManagement.active')} variant="success" icon={<Check className="w-3 h-3" aria-hidden="true" />} />
+              ) : (
+                <Badge label={t('userManagement.inactive')} variant="default" icon={<X className="w-3 h-3" aria-hidden="true" />} />
+              ),
+            },
+            {
+              header: t('userManagement.apps'),
+              accessor: 'owned_apps_count',
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark',
+            },
+            {
+              header: t('userManagement.apiKeys'),
+              accessor: 'api_keys_count',
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark',
+            },
+            {
+              header: t('userManagement.created'),
+              render: (user) => new Date(user.created_at).toLocaleDateString(i18n.language),
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark',
+            },
+            {
+              header: t('userManagement.actions'),
+              sticky: 'right' as const,
+              render: (user) => user.is_omniadmin ? (
+                <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark italic">{t('userManagement.protectedAccount')}</span>
+              ) : user.email === currentUser?.email ? (
+                <span className="text-xs text-fg-secondary dark:text-fg-secondary-dark italic">{t('userManagement.yourAccount')}</span>
+              ) : (
+                <ActionDropdown
+                  triggerAriaLabel={t('userManagement.actionsFor', { name: user.name || user.email })}
+                  actions={[
+                    ...(user.platform_role !== 'viewer' ? [{
+                      label: settingRole === user.user_id ? t('userManagement.setting') : t('userManagement.setAsViewer'),
+                      onClick: () => { void handleSetPlatformRole(user.user_id, 'viewer', user.name || user.email); },
+                      icon: <Eye className="w-4 h-4" />,
+                      variant: 'default' as const,
+                      disabled: settingRole === user.user_id,
+                    }] : []),
+                    ...(user.platform_role !== 'editor' ? [{
+                      label: settingRole === user.user_id ? t('userManagement.setting') : t('userManagement.setAsEditor'),
+                      onClick: () => { void handleSetPlatformRole(user.user_id, 'editor', user.name || user.email); },
+                      icon: <Pencil className="w-4 h-4" />,
+                      variant: 'default' as const,
+                      disabled: settingRole === user.user_id,
+                    }] : []),
+                    ...(user.platform_role !== 'admin' ? [{
+                      label: settingRole === user.user_id ? t('userManagement.setting') : t('userManagement.setAsAdmin'),
+                      onClick: () => { void handleSetPlatformRole(user.user_id, 'admin', user.name || user.email); },
+                      icon: <UserCheck className="w-4 h-4" />,
+                      variant: 'default' as const,
+                      disabled: settingRole === user.user_id,
+                    }] : []),
+                    ...(user.is_active ? [{
+                      label: activatingUser === user.user_id ? t('userManagement.deactivating') : t('userManagement.deactivate'),
+                      onClick: () => { void handleDeactivateUser(user.user_id, user.name || user.email); },
+                      icon: <Ban className="w-4 h-4" />,
+                      variant: 'warning' as const,
+                      disabled: activatingUser === user.user_id,
+                    }] : [{
+                      label: activatingUser === user.user_id ? t('userManagement.activating') : t('userManagement.activate'),
+                      onClick: () => { void handleActivateUser(user.user_id); },
+                      icon: <Check className="w-4 h-4" />,
+                      variant: 'success' as const,
+                      disabled: activatingUser === user.user_id,
+                    }]),
+                    {
+                      label: resettingQuota === user.user_id ? t('userManagement.resetting') : t('userManagement.resetQuota'),
+                      onClick: () => { void handleResetQuota(user.user_id, user.name || user.email); },
+                      icon: <RefreshCcw className="w-4 h-4" />,
+                      variant: 'warning' as const,
+                      disabled: resettingQuota === user.user_id,
+                    },
+                    ...(isLocalMode ? [{
+                      label: issuingResetLink === user.user_id ? t('userManagement.generating') : t('userManagement.resetPasswordLink'),
+                      onClick: () => { void handleIssueResetLink(user.user_id); },
+                      icon: <Link className="w-4 h-4" />,
+                      variant: 'default' as const,
+                      disabled: issuingResetLink === user.user_id,
+                    }] : []),
+                    {
+                      label: deletingUser === user.user_id ? t('userManagement.deleting') : t('userManagement.delete'),
+                      onClick: () => { void handleDeleteUser(user.user_id); },
+                      icon: <Trash2 className="w-4 h-4" />,
+                      variant: 'danger' as const,
+                      disabled: deletingUser === user.user_id,
+                    },
+                  ]}
+                  size="sm"
+                />
+              ),
+              className: 'px-6 py-4 whitespace-nowrap text-sm font-medium',
+            },
+          ]}
+          rowClassName=""
+          emptyMessage={t('userManagement.noUsersFound')}
+          emptySubMessage={searchQuery ? t('userManagement.adjustSearch') : t('userManagement.noUsersYet')}
+        />
 
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-slate-700">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-700 dark:text-slate-400">
-                Showing page {currentPage} of {totalPages}
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="px-3 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <TablePagination
+          page={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {isLocalMode && (
@@ -499,7 +457,7 @@ function UsersPage() {
           onClose={() => setResetLinkState(null)}
           token={resetLinkState.token}
           expiresAt={resetLinkState.expiresAt}
-          title="Password reset link"
+          title={t('userManagement.passwordResetLinkTitle')}
         />
       )}
 

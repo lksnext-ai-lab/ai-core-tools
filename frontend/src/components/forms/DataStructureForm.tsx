@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { BarChart2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import FieldManager from './FieldManager';
-import FormActions from './FormActions';
+import { FormActions } from '../ui/FormActions';
+import Alert from '../ui/Alert';
 import { randomId } from '../../utils/randomId';
+import FormField, { FormTextArea } from '../ui/FormField';
 
 interface FieldDefinition {
   name: string;
@@ -37,6 +39,7 @@ interface DataStructureFormProps {
 }
 
 function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataStructureFormProps>) {
+  const { t } = useTranslation('common');
   const [formData, setFormData] = useState<DataStructureFormData>({
     name: '',
     description: '',
@@ -75,32 +78,32 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
 
   const validateForm = (): string | null => {
     if (!formData.name.trim()) {
-      return 'Data structure name is required';
+      return t('dataStructuresPage.form.nameRequired');
     }
 
     const namePattern = /^\w+$/;
     if (!namePattern.test(formData.name)) {
-      return 'Name can only contain letters, numbers, and underscores';
+      return t('dataStructuresPage.form.invalidName');
     }
 
     // Validate fields
     const fieldNames = formData.fields.map(f => f.name).filter(name => name.trim());
     const uniqueNames = new Set(fieldNames);
     if (fieldNames.length !== uniqueNames.size) {
-      return 'Field names must be unique';
+      return t('dataStructuresPage.form.duplicateFieldNames');
     }
 
     for (const field of formData.fields) {
       if (field.name && !namePattern.test(field.name)) {
-        return `Field name '${field.name}' can only contain letters, numbers, and underscores`;
+        return t('dataStructuresPage.form.invalidFieldName', { name: field.name });
       }
       
       if (field.type === 'parser' && !field.parser_id) {
-        return `Field '${field.name}' with parser type must have a parser selected`;
+        return t('dataStructuresPage.form.parserRequired', { name: field.name });
       }
       
       if (field.type === 'list' && field.list_item_type === 'parser' && !field.list_item_parser_id) {
-        return `Field '${field.name}' with list of parsers must have a parser selected`;
+        return t('dataStructuresPage.form.listParserRequired', { name: field.name });
       }
     }
 
@@ -129,7 +132,7 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
         fields: cleanedFields
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save data structure');
+      setError(err instanceof Error ? err.message : t('dataStructuresPage.form.saveFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -139,49 +142,30 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-600 text-sm">{error}</p>
-        </div>
-      )}
+      {error && <Alert type="error" message={error} />}
 
       {/* Basic Information */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Name */}
-        <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-            Data Structure Name *
-          </label>
-          <input
-            type="text"
-            id="name"
-            name="name"
-            value={formData.name}
-            onChange={handleBasicFieldChange}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base"
-            placeholder="e.g., User, Product, Address"
-            required
-          />
-          <p className="mt-2 text-sm text-gray-500">
-            Use PascalCase for structure names (e.g., UserProfile, ProductInfo)
-          </p>
-        </div>
+        <FormField
+          label={t('dataStructuresPage.form.name')}
+          id="name"
+          value={formData.name}
+          onChange={handleBasicFieldChange}
+          required
+          placeholder={t('dataStructuresPage.form.namePlaceholder')}
+          helpText={t('dataStructuresPage.form.nameHelp')}
+        />
 
         {/* Description */}
-        <div>
-          <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-            Description
-          </label>
-          <textarea
-            id="description"
-            name="description"
-            value={formData.description}
-            onChange={handleBasicFieldChange}
-            rows={4}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base resize-none"
-            placeholder="Describe what this data structure represents..."
-          />
-        </div>
+        <FormTextArea
+          label={t('dataStructuresPage.form.description')}
+          id="description"
+          value={formData.description}
+          onChange={handleBasicFieldChange}
+          rows={4}
+          placeholder={t('dataStructuresPage.form.descriptionPlaceholder')}
+        />
       </div>
 
       {/* Fields Management */}
@@ -195,41 +179,32 @@ function DataStructureForm({ dataStructure, onSubmit, onCancel }: Readonly<DataS
       </div>
 
       {/* Info Box */}
-      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <BarChart2 className="w-4 h-4 text-purple-400" />
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-purple-800">
-              About Data Structures
-            </h3>
-            <div className="mt-2 text-sm text-purple-700">
-              <p className="mb-2">
-                Data structures define the schema for structured data extraction and processing. 
-                They generate Pydantic models that validate and parse AI agent outputs.
-              </p>
-              <div>
-                <strong>Use cases:</strong>
-                <ul className="list-disc list-inside mt-1 space-y-1">
-                  <li>Define agent output schemas for consistent responses</li>
-                  <li>Create metadata structures for document processing</li>
-                  <li>Build complex nested data models with references</li>
-                  <li>Validate and type-check extracted information</li>
-                </ul>
-              </div>
+      <Alert
+        type="info"
+        title={t('dataStructuresPage.form.aboutTitle')}
+        message={
+          <>
+            <p className="mb-2">
+              {t('dataStructuresPage.form.aboutMessage')}
+            </p>
+            <div>
+              <strong>{t('dataStructuresPage.form.useCases')}</strong>
+              <ul className="list-disc list-inside mt-1 space-y-1">
+                <li>{t('dataStructuresPage.form.agentSchemas')}</li>
+                <li>{t('dataStructuresPage.form.documentMetadata')}</li>
+                <li>{t('dataStructuresPage.form.nestedModels')}</li>
+                <li>{t('dataStructuresPage.form.validateData')}</li>
+              </ul>
             </div>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Form Actions */}
       <FormActions
         onCancel={onCancel}
         isSubmitting={isSubmitting}
         isEditing={isEditing}
-        submitLabel={isEditing ? 'Update Structure' : 'Create Structure'}
-        submitButtonColor="purple"
       />
     </form>
   );

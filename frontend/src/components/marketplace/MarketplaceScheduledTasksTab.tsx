@@ -1,17 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { apiService, type MarketplaceScheduledTask } from '../../services/api';
 import { LoadingState } from '../ui/LoadingState';
 import { ErrorState } from '../ui/ErrorState';
 import { MarketplaceScheduledTaskCard } from './MarketplaceScheduledTaskCard';
 import { Pagination } from './Pagination';
+import ButtonApp from '../ui/ButtonApp';
+import { FormField } from '../ui/FormField';
+import { BackgroundImage } from '../ui/BackgroundImage';
+import { CardApp } from '../ui/CardApp';
+import { SidePanel } from '../ui/SidePanel';
+import MarketplaceScheduledTaskPage from '../../pages/MarketplaceScheduledTaskPage';
+import { useTranslation } from 'react-i18next';
 
 const PAGE_SIZE = 12;
 
 /** Catalog of published scheduled tasks (read-only results). */
 export function MarketplaceScheduledTasksTab() {
-  const navigate = useNavigate();
+  const { t } = useTranslation('common');
+  // Task shown in the right-hand detail panel (null = closed)
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [myAppsOnly, setMyAppsOnly] = useState(false);
@@ -42,34 +50,44 @@ export function MarketplaceScheduledTasksTab() {
       setTotal(data.total);
       setTotalPages(data.total_pages);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load scheduled tasks');
+      setError(err instanceof Error ? err.message : t('marketplacePage.loadScheduledTasksFailed'));
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, myAppsOnly, page]);
+  }, [debouncedSearch, myAppsOnly, page, t]);
 
   useEffect(() => { void fetchCatalog(); }, [fetchCatalog]);
 
+  const handleTaskClick = useCallback((taskId: number) => setSelectedTaskId(taskId), []);
+  const handleClosePanel = useCallback(() => setSelectedTaskId(null), []);
+
   let content;
-  if (loading) content = <LoadingState message="Loading scheduled tasks..." />;
+  if (loading) content = <LoadingState message={t('marketplacePage.loadingScheduledTasks')} />;
   else if (error) content = <ErrorState error={error} onRetry={fetchCatalog} />;
   else if (tasks.length === 0) {
     content = (
-      <div className="py-16 text-center">
-        <Search className="mx-auto h-12 w-12 text-gray-300" aria-hidden="true" />
-        <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-gray-100">No scheduled tasks found</h3>
-        <p className="mt-1 text-sm text-gray-500">
-          {debouncedSearch || myAppsOnly ? 'Try adjusting your search or filters.' : 'No scheduled tasks have been published yet.'}
+      <CardApp className="py-16 flex items-center justify-center">
+        <BackgroundImage
+                        icon={Search}
+                        size={64}
+                        iconSize={32}
+                        variant="marron"
+                      />
+        <h3 className="mt-4 text-lg font-medium text-fg dark:text-fg-dark">{t('marketplacePage.noScheduledTasksFound')}</h3>
+        <p className="mt-1 text-sm text-fg-secondary dark:text-fg-secondary-dark">
+          {debouncedSearch || myAppsOnly ? t('marketplacePage.adjustFilters') : t('marketplacePage.noScheduledTasksPublished')}
         </p>
-      </div>
+      </CardApp>
     );
   } else {
     content = (
       <>
-        <p className="text-sm text-gray-500">Showing {tasks.length} of {total} task{total === 1 ? '' : 's'}</p>
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+          {t('marketplacePage.taskCount', { count: total, shown: tasks.length })}
+        </p>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {tasks.map((task) => (
-            <MarketplaceScheduledTaskCard key={task.id} task={task} onClick={(id) => navigate(`/marketplace/scheduled-tasks/${id}`)} />
+            <MarketplaceScheduledTaskCard key={task.id} task={task} onClick={handleTaskClick} />
           ))}
         </div>
         {totalPages > 1 && <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />}
@@ -80,31 +98,46 @@ export function MarketplaceScheduledTasksTab() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col flex-wrap items-start gap-3 sm:flex-row sm:items-center">
+
+
         <div className="relative min-w-[200px] flex-1">
-          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-fg-faint dark:text-fg-faint-dark">
             <Search className="h-4 w-4" aria-hidden="true" />
           </span>
-          <input
-            type="text"
+          <FormField
+            id="scheduled-tasks-search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search scheduled tasks..."
-            aria-label="Search scheduled tasks"
-            className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder={t('marketplacePage.searchScheduledTasks')}
+            ariaLabel={t('marketplacePage.searchScheduledTasks')}
+            inputClassName="pl-10 pr-3"
           />
         </div>
-        <button
-          type="button"
-          aria-pressed={myAppsOnly}
+        <ButtonApp
+          label={t('marketplacePage.myApps')}
+          variant="primary"
+          size="control"
+          ariaPressed={myAppsOnly}
           onClick={() => setMyAppsOnly((v) => !v)}
-          className={`rounded-lg border px-4 py-2 text-sm transition-colors ${
-            myAppsOnly ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          My Apps
-        </button>
+        />
       </div>
+     
       {content}
+
+      {/* Task detail side panel — fixed wrapper that starts below the 56px (h-14) app header */}
+      {selectedTaskId !== null && (
+        <div className="fixed inset-x-0 bottom-0 top-14 z-10 !mt-0">
+          <SidePanel
+            open
+            side="right"
+            onClose={handleClosePanel}
+            title={t('marketplacePage.title')}
+            widthClassName="w-[640px] max-w-full"
+          >
+            <MarketplaceScheduledTaskPage key={selectedTaskId} taskId={selectedTaskId} variant="panel" />
+          </SidePanel>
+        </div>
+      )}
     </div>
   );
 }

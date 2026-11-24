@@ -1,5 +1,8 @@
-import { CheckCircle2, XCircle } from 'lucide-react';
 import Modal from '../ui/Modal';
+import Alert from '../ui/Alert';
+import { ButtonApp } from '../ui/ButtonApp';
+import LoadingState from '../ui/LoadingState';
+import { useTranslation } from 'react-i18next';
 import type { TestConnectionResult } from './serviceApi';
 import type { ServiceKindLabel } from './useServiceConnectionTest';
 
@@ -20,45 +23,45 @@ function ServiceConnectionTestModal({
   result,
   onClose,
 }: Readonly<ServiceConnectionTestModalProps>) {
+  const { t } = useTranslation('common');
+  const serviceKindTranslationKey = {
+    AI: 'connectionTestResult.serviceKinds.ai',
+    embedding: 'connectionTestResult.serviceKinds.embedding',
+    sandbox: 'connectionTestResult.serviceKinds.sandbox',
+  }[serviceKind];
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={() => !isTesting && onClose()}
-      title="Connection Test Result"
+      title={t('connectionTestResult.title')}
       size="medium"
     >
       <div className="space-y-4">
-        <div role="status" aria-live="polite" aria-atomic="true">
-          {isTesting ? (
-            <div className="py-6 text-center">
-              <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-b-2 border-blue-600" aria-hidden="true" />
-              <p className="text-gray-600 dark:text-slate-300">
-                Testing connection to {serviceKind} service {serviceName}...
-              </p>
-            </div>
-          ) : result && (
-            <div
-              className={`rounded p-3 ${
-                result.status === 'success'
-                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
-                  : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                {result.status === 'success'
-                  ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                  : <XCircle className="h-4 w-4" aria-hidden="true" />}
-                <strong>Status:</strong> {result.status === 'success' ? 'Success' : 'Error'}
-              </div>
-              <p className="mt-1"><strong>Message:</strong> {result.message}</p>
-            </div>
-          )}
-        </div>
+        {isTesting ? (
+          <LoadingState
+            variant="section"
+            className="py-6"
+            message={t('connectionTestResult.testing', {
+              serviceKind: t(serviceKindTranslationKey),
+              serviceName,
+            })}
+          />
+        ) : result && (
+          <Alert
+            type={result.status === 'success' ? 'success' : 'error'}
+            title={t('connectionTestResult.statusTitle', {
+              status: t(`connectionTestResult.status.${result.status}`),
+            })}
+            message={<><strong>{t('connectionTestResult.message')}:</strong> {result.message}</>}
+            polite={result.status === 'success'}
+          />
+        )}
 
         {!isTesting && result?.response && (
           <div>
-            <h4 className="mb-2 font-semibold">Response:</h4>
-            <div className="max-h-60 overflow-y-auto whitespace-pre-wrap rounded border bg-gray-50 p-3 font-mono text-sm dark:border-slate-600 dark:bg-slate-700">
+            <h4 className="mb-2 font-semibold">{t('connectionTestResult.response')}:</h4>
+            <div className="max-h-60 overflow-y-auto whitespace-pre-wrap rounded bg-canvas-alt dark:bg-canvas-alt-dark p-3 text-sm text-fg dark:text-fg-dark">
               {result.response}
             </div>
           </div>
@@ -66,13 +69,13 @@ function ServiceConnectionTestModal({
 
         {!isTesting && (
           <div className="flex justify-end">
-            <button
+            <ButtonApp
+              label={t('connectionTestResult.close')}
               type="button"
               onClick={onClose}
-              className="rounded bg-gray-200 px-4 py-2 text-gray-800 hover:bg-gray-300 dark:bg-slate-600 dark:text-slate-100 dark:hover:bg-slate-500"
-            >
-              Close
-            </button>
+              variant="secondary"
+              size="medium"
+            />
           </div>
         )}
       </div>

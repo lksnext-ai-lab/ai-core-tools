@@ -53,7 +53,7 @@ class Agent(Base):
 | `output_parser_id` | Structured output schema (optional) |
 | `temperature` | LLM sampling temperature (0.0-1.0) |
 | `marketplace_visibility` | `UNPUBLISHED` / `PRIVATE` / `PUBLIC` (default `UNPUBLISHED`) |
-| `enable_code_interpreter` | Enable code interpreter tool (default `false`) |
+| `enable_code_interpreter` | Enable code interpreter tool (default `false`). The App Chat does not use this flag: its code interpreter is an App-level switch, see [App Chat](app-chat.md#code-interpreter) |
 | `server_tools` | JSON list of server-side built-in tool configs (default `[]`) |
 
 **Linked resources**:
@@ -471,6 +471,7 @@ When the quota is exceeded, the endpoint returns:
 - [LLM Integration](llm-integration.md) — AI service configuration
 - [RAG & Vector Stores](rag-vector-stores.md) — Silo and retrieval
 - [MCP Integration](mcp-integration.md) — MCP servers and tools
+- [App Chat](app-chat.md) — Hidden internal agent (`Agent.kind = 'internal_chat'`) and per-turn configuration
 - [Backend Architecture](../architecture/backend.md) — Agent execution service
 - [Database Schema](../architecture/database.md) — Agent model
 - [File Processing](../reference/file-processing.md) — File handling details

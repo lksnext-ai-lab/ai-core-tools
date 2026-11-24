@@ -1,0 +1,20 @@
+# Opt-in hardening for the OpenSandbox workloads network: DENY egress.
+#   docker compose -f docker-compose.yaml -f docker-compose.sandbox-hardened.yaml \
+#     --profile opensandbox up -d
+# (or set COMPOSE_FILE=docker-compose.yaml:docker-compose.sandbox-hardened.yaml in .env)
+#
+# Effect: sandboxes get NO internet, NO route to the Docker host (no host service,
+# no published port), NO LAN/RFC1918/link-local access. They can still reach each
+# other's exec daemon (:44772) and the server proxies into them as usual.
+# Breaks: anything needing network inside a sandbox (`pip install` in skill
+# bootstrap scripts, HTTP calls, git clone).
+# Requires Docker Engine >= 28 (gateway_mode_ipv4=isolated; verified on 28.5.1).
+# `internal: true` alone is NOT enough: containers on an internal network still
+# reach host services listening on 0.0.0.0 via the bridge gateway IP.
+# Switching modes requires recreating the network:
+#   docker compose --profile opensandbox down   (then up -d with the new files)
+networks:
+  sandbox-workloads:
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated

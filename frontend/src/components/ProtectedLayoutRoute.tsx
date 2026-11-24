@@ -16,6 +16,9 @@ interface LayoutRouteProps {
   footerProps?: any;
   layoutProps?: any;
   navigationProps?: any;
+  mainProps?: {
+    className?: string;
+  };
   showSidebar?: boolean;
   showHeader?: boolean;
   showFooter?: boolean;
@@ -33,6 +36,7 @@ export const LayoutRoute: React.FC<LayoutRouteProps> = ({
   footerProps,
   layoutProps,
   navigationProps,
+  mainProps,
   showSidebar = true,
   showHeader = true,
   showFooter = true,
@@ -48,6 +52,7 @@ export const LayoutRoute: React.FC<LayoutRouteProps> = ({
         footerProps={footerProps}
         layoutProps={layoutProps}
         navigationProps={navigationProps}
+        mainProps={mainProps}
         showSidebar={showSidebar}
         showHeader={showHeader}
         showFooter={showFooter}

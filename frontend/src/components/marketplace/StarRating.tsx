@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface StarRatingProps {
   /** Current value (1–5), null means no rating */
@@ -24,6 +25,7 @@ export function StarRating({
   onChange,
   size = 'sm',
 }: StarRatingProps) {
+  const { t } = useTranslation('common');
   const [hovered, setHovered] = useState<number | null>(null);
 
   const starSize = size === 'md' ? 'text-xl' : 'text-sm';
@@ -33,7 +35,7 @@ export function StarRating({
     <div
       className="flex items-center gap-0.5"
       role={interactive ? 'radiogroup' : undefined}
-      aria-label="Star rating"
+      aria-label={t('marketplaceAgentDetail.starRating')}
     >
       {Array.from({ length: max }, (_, i) => {
         const starValue = i + 1;
@@ -43,7 +45,7 @@ export function StarRating({
           return (
             <span
               key={starValue}
-              className={`${starSize} leading-none ${isFilled ? 'text-yellow-400' : 'text-gray-300'}`}
+              className={`${starSize} leading-none ${isFilled ? 'text-bronze dark:text-bronze-dark' : 'text-fg-faint2 dark:text-fg-faint2-dark'}`}
               aria-hidden="true"
             >
               ★
@@ -57,10 +59,10 @@ export function StarRating({
             type="button"
             role="radio"
             aria-checked={value === starValue}
-            aria-label={`${starValue} star${starValue === 1 ? '' : 's'}`}
+            aria-label={t('marketplaceAgentDetail.starOption', { count: starValue })}
             className={`${starSize} leading-none transition-colors cursor-pointer ${
-              isFilled ? 'text-yellow-400' : 'text-gray-300'
-            } hover:text-yellow-400`}
+              isFilled ? 'text-bronze dark:text-bronze-dark' : 'text-fg-faint2 dark:text-fg-faint2-dark'
+            } hover:text-bronze dark:hover:text-bronze-dark`}
             onMouseEnter={() => setHovered(starValue)}
             onMouseLeave={() => setHovered(null)}
             onClick={() => onChange?.(starValue)}
