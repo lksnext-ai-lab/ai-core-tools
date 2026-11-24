@@ -335,7 +335,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                       <AppMetricsPage />
                   </EditorLayoutRoute>
                 } />
-
                 <Route path="/apps/:appId/mcp-servers" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <MCPServersPage />
@@ -442,7 +441,6 @@ export const ExtensibleBaseApp: React.FC<ExtensibleBaseAppProps> = ({
                     <UserDetailPage />
                   </AdminLayoutRoute>
                 } />
-
                 <Route path="/admin/stats" element={
                   <AdminLayoutRoute {...commonLayoutProps}>
                     <StatsPage />

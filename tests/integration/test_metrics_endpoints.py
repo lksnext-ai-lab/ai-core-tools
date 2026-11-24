@@ -1,4 +1,4 @@
-"""Integration tests for the metrics dashboards API (system, app and agent scopes).
+"""Integration tests for the metrics dashboards API (system, admin app, app and agent scopes).
 
 Requires the test DB (port 5433).
 """
@@ -206,6 +206,24 @@ class TestSystemScope:
         apps = client.get("/internal/admin/metrics/breakdown/app?range=24h",
                           headers=_headers(platform_admin)).json()["items"]
         assert str(fake_app.app_id) in {i["key"] for i in apps}
+
+    def test_platform_admin_can_view_metrics_for_an_app_without_app_access(
+        self, client, fake_app, seeded, platform_admin
+    ):
+        assert fake_app.owner_id != platform_admin.user_id
+        response = client.get(
+            f"/internal/admin/apps/{fake_app.app_id}/metrics/summary?range=24h",
+            headers=_headers(platform_admin),
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["current"]["executions"] == 3
+
+    def test_non_admin_cannot_use_platform_app_metrics_scope(self, client, fake_app, owner_headers):
+        response = client.get(
+            f"/internal/admin/apps/{fake_app.app_id}/metrics/summary?range=24h",
+            headers=owner_headers,
+        )
+        assert response.status_code == 403
 
     def test_agent_breakdown_carries_app_name(self, client, fake_app, seeded, platform_admin):
         items = client.get("/internal/admin/metrics/breakdown/agent?range=24h",

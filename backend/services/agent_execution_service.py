@@ -1600,6 +1600,9 @@ class AgentExecutionService:
             try:
                 from services.usage_tracking_service import UsageTrackingService
                 UsageTrackingService.record_system_llm_call(db, _quota_user_id(ctx.user_context))
+                # The request-count update commits before this write; persist usage
+                # here so turns without a conversation are not rolled back on close.
+                db.commit()
             except Exception as _usage_exc:
                 logger.warning(
                     "Failed to record system LLM usage: %s", _usage_exc, exc_info=True

@@ -56,6 +56,8 @@ SYSTEM_AI_SERVICE_NOT_FOUND = "System AI service not found"
 SYSTEM_EMBEDDING_SERVICE_NOT_FOUND = "System embedding service not found"
 SYSTEM_SANDBOX_SERVICE_NOT_FOUND = "System sandbox service not found"
 SYSTEM_SKILL_NOT_FOUND = "System skill not found"
+NOT_FOUND_MESSAGE = "Not found."
+TEST_CONNECTION_FAILED_MESSAGE = "Test failed"
 
 
 def require_admin(
@@ -931,7 +933,11 @@ async def list_system_ai_services(
     return [AIServiceService.to_detail(svc, warning_days) for svc in services]
 
 
-@router.get("/system-ai-services/{service_id}", response_model=AIServiceDetailSchema)
+@router.get(
+    "/system-ai-services/{service_id}",
+    response_model=AIServiceDetailSchema,
+    responses={404: {"description": "System AI service not found"}},
+)
 async def get_system_ai_service(
     service_id: int,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
@@ -982,7 +988,11 @@ async def create_system_ai_service(
     return AIServiceService._to_list_item(svc, is_system=True, warning_days=ServiceLifecycleService.warning_days(db))
 
 
-@router.put("/system-ai-services/{service_id}", response_model=AIServiceListItemSchema)
+@router.put(
+    "/system-ai-services/{service_id}",
+    response_model=AIServiceListItemSchema,
+    responses={404: {"description": "System AI service not found"}},
+)
 async def update_system_ai_service(
     service_id: int,
     body: CreateUpdateAIServiceSchema,
@@ -1013,7 +1023,11 @@ async def update_system_ai_service(
     return AIServiceService._to_list_item(svc, is_system=True, warning_days=ServiceLifecycleService.warning_days(db))
 
 
-@router.delete("/system-ai-services/{service_id}", status_code=204)
+@router.delete(
+    "/system-ai-services/{service_id}",
+    status_code=204,
+    responses={404: {"description": "System AI service not found"}},
+)
 async def delete_system_ai_service(
     service_id: int,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
@@ -1078,7 +1092,11 @@ async def create_system_embedding_service(
     )
 
 
-@router.put("/system-embedding-services/{service_id}", response_model=EmbeddingServiceListItemSchema)
+@router.put(
+    "/system-embedding-services/{service_id}",
+    response_model=EmbeddingServiceListItemSchema,
+    responses={404: {"description": "System embedding service not found"}},
+)
 async def update_system_embedding_service(
     service_id: int,
     body: CreateUpdateEmbeddingServiceSchema,
@@ -1111,7 +1129,11 @@ async def update_system_embedding_service(
     )
 
 
-@router.get("/system-ai-services/{service_id}/used-by", response_model=ServiceUsageSchema)
+@router.get(
+    "/system-ai-services/{service_id}/used-by",
+    response_model=ServiceUsageSchema,
+    responses={404: {"description": "System AI service not found"}},
+)
 async def get_system_ai_service_used_by(
     service_id: int,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
@@ -1124,7 +1146,11 @@ async def get_system_ai_service_used_by(
     return usage
 
 
-@router.get("/system-embedding-services/{service_id}/used-by", response_model=ServiceUsageSchema)
+@router.get(
+    "/system-embedding-services/{service_id}/used-by",
+    response_model=ServiceUsageSchema,
+    responses={404: {"description": "System embedding service not found"}},
+)
 async def get_system_embedding_service_used_by(
     service_id: int,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
@@ -1137,7 +1163,11 @@ async def get_system_embedding_service_used_by(
     return usage
 
 
-@router.get("/system-embedding-services/{service_id}/impact", response_model=SystemEmbeddingServiceImpactSchema)
+@router.get(
+    "/system-embedding-services/{service_id}/impact",
+    response_model=SystemEmbeddingServiceImpactSchema,
+    responses={404: {"description": "System embedding service not found"}},
+)
 async def get_system_embedding_service_impact(
     service_id: int,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
@@ -1177,7 +1207,11 @@ async def get_system_embedding_service_impact(
     )
 
 
-@router.delete("/system-embedding-services/{service_id}", status_code=204)
+@router.delete(
+    "/system-embedding-services/{service_id}",
+    status_code=204,
+    responses={404: {"description": "System embedding service not found"}},
+)
 async def delete_system_embedding_service(
     service_id: int,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
@@ -1433,7 +1467,10 @@ async def test_system_ai_service_connection_with_config(
     config: CreateUpdateAIServiceSchema,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
-    service_id: Optional[int] = Query(None, description="Edit-mode: recover stored API key when the request sends a masked placeholder"),
+    service_id: Annotated[
+        Optional[int],
+        Query(description="Edit-mode: recover stored API key when the request sends a masked placeholder"),
+    ] = None,
 ):
     """Test a system AI service connection (OMNIADMIN). Falls back to the stored key when api_key is empty or masked."""
     from services.ai_service_service import AIServiceService
@@ -1478,7 +1515,7 @@ async def test_system_ai_service_connection_with_config(
             type(e).__name__,
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail="Test failed")
+        raise HTTPException(status_code=500, detail=TEST_CONNECTION_FAILED_MESSAGE)
 
 
 @router.get("/system-sandbox-services", response_model=List[SandboxServiceDetailSchema])
@@ -1495,7 +1532,11 @@ async def list_system_sandbox_services(
     return [SandboxServiceService.to_detail(svc, warning_days) for svc in services]
 
 
-@router.get("/system-sandbox-services/{service_id}", response_model=SandboxServiceDetailSchema)
+@router.get(
+    "/system-sandbox-services/{service_id}",
+    response_model=SandboxServiceDetailSchema,
+    responses={404: {"description": "System sandbox service not found"}},
+)
 async def get_system_sandbox_service(
     service_id: int,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
@@ -1512,7 +1553,11 @@ async def get_system_sandbox_service(
     return SandboxServiceService.to_detail(svc, ServiceLifecycleService.warning_days(db))
 
 
-@router.get("/system-sandbox-services/{service_id}/used-by", response_model=ServiceUsageSchema)
+@router.get(
+    "/system-sandbox-services/{service_id}/used-by",
+    response_model=ServiceUsageSchema,
+    responses={404: {"description": "System sandbox service not found"}},
+)
 async def get_system_sandbox_service_used_by(
     service_id: int,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
@@ -1528,7 +1573,12 @@ async def get_system_sandbox_service_used_by(
     return usage
 
 
-@router.post("/system-sandbox-services", response_model=SandboxServiceListItemSchema, status_code=201)
+@router.post(
+    "/system-sandbox-services",
+    response_model=SandboxServiceListItemSchema,
+    status_code=201,
+    responses={400: {"description": "Sandbox provider is not available"}},
+)
 async def create_system_sandbox_service(
     body: CreateUpdateSandboxServiceSchema,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
@@ -1575,7 +1625,14 @@ async def create_system_sandbox_service(
     )
 
 
-@router.put("/system-sandbox-services/{service_id}", response_model=SandboxServiceListItemSchema)
+@router.put(
+    "/system-sandbox-services/{service_id}",
+    response_model=SandboxServiceListItemSchema,
+    responses={
+        400: {"description": "Sandbox provider is not available"},
+        404: {"description": "System sandbox service not found"},
+    },
+)
 async def update_system_sandbox_service(
     service_id: int,
     body: CreateUpdateSandboxServiceSchema,
@@ -1620,7 +1677,11 @@ async def update_system_sandbox_service(
     )
 
 
-@router.delete("/system-sandbox-services/{service_id}", status_code=204)
+@router.delete(
+    "/system-sandbox-services/{service_id}",
+    status_code=204,
+    responses={404: {"description": "System sandbox service not found"}},
+)
 async def delete_system_sandbox_service(
     service_id: int,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
@@ -1643,7 +1704,10 @@ async def test_system_sandbox_service_connection_with_config(
     config: CreateUpdateSandboxServiceSchema,
     auth_context: Annotated[AuthContext, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
-    service_id: Optional[int] = Query(None, description="Edit-mode: recover stored API key when the request sends a masked placeholder"),
+    service_id: Annotated[
+        Optional[int],
+        Query(description="Edit-mode: recover stored API key when the request sends a masked placeholder"),
+    ] = None,
 ):
     """Test a system Sandbox Service connection (OMNIADMIN). Falls back to the stored key when api_key is empty or masked."""
     from services.sandbox_service_service import SandboxServiceService
@@ -1691,7 +1755,7 @@ async def test_system_sandbox_service_connection_with_config(
             type(e).__name__,
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail="Test failed")
+        raise HTTPException(status_code=500, detail=TEST_CONNECTION_FAILED_MESSAGE)
 
 
 from schemas.local_auth_schemas import AdminCreateUserRequest, AdminSetPasswordRequest
@@ -1717,7 +1781,7 @@ class _LocalUserCreatedResponse(BaseModel):
 
     user_id: int
     email: str
-    name: Optional[str]
+    name: Optional[str] = None
     set_password_token: str
     expires_at: str
 
@@ -1761,7 +1825,7 @@ async def create_local_user(
     from utils.auth_config import AuthConfig
 
     if AuthConfig.LOGIN_MODE != "LOCAL":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NOT_FOUND_MESSAGE)
 
     try:
         user = await _CredentialService.admin_create_user(db, email=str(body.email), name=body.name)
@@ -1812,7 +1876,7 @@ async def admin_set_user_password(
     from utils.auth_config import AuthConfig
 
     if AuthConfig.LOGIN_MODE != "LOCAL":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NOT_FOUND_MESSAGE)
 
     user = UserService.get_user_by_id(db, user_id)
     if not user:
@@ -1851,7 +1915,7 @@ async def issue_reset_link(
     from utils.auth_config import AuthConfig
 
     if AuthConfig.LOGIN_MODE != "LOCAL":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NOT_FOUND_MESSAGE)
 
     user = UserService.get_user_by_id(db, user_id)
     if not user:
@@ -1886,7 +1950,7 @@ async def admin_revoke_sessions(
     from utils.auth_config import AuthConfig
 
     if AuthConfig.LOGIN_MODE != "LOCAL":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NOT_FOUND_MESSAGE)
 
     user = UserService.get_user_by_id(db, user_id)
     if not user:
@@ -1951,4 +2015,4 @@ async def test_system_embedding_service_connection_with_config(
             type(e).__name__,
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail="Test failed")
+        raise HTTPException(status_code=500, detail=TEST_CONNECTION_FAILED_MESSAGE)

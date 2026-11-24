@@ -36,13 +36,14 @@ class UsageTrackingService:
         After incrementing, checks if usage has crossed the 80% threshold and sends
         a warning email once per period.
         Returns the updated UsageRecord.
-        Is a no-op in self-managed mode.
         """
-        if is_self_managed():
-            return None
-
         usage_repo = UsageRecordRepository(db)
         record = usage_repo.increment(user_id)
+
+        # Self-managed deployments track usage for admin visibility, but do not
+        # apply subscription quotas or send quota warning emails.
+        if is_self_managed():
+            return record
 
         # Check 80% warning threshold
         tier = _get_effective_tier(db, user_id)

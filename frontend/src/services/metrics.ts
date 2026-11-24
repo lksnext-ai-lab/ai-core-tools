@@ -32,6 +32,7 @@ function scopeApi(base: string): MetricsScopeApi {
 
 export const metricsApi = {
   system: (): MetricsScopeApi => scopeApi('/internal/admin/metrics'),
+  adminApp: (appId: number): MetricsScopeApi => scopeApi(`/internal/admin/apps/${appId}/metrics`),
   app: (appId: number): MetricsScopeApi => scopeApi(`/internal/apps/${appId}/metrics`),
   agent: (appId: number, agentId: number): MetricsScopeApi =>
     scopeApi(`/internal/apps/${appId}/agents/${agentId}/metrics`),

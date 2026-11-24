@@ -102,6 +102,30 @@ def make_context(agent=None, fresh_agent=None, **kwargs) -> AgentExecutionContex
     return AgentExecutionContext(**defaults)
 
 
+@pytest.mark.asyncio
+async def test_system_llm_usage_is_committed_without_conversation(mocker):
+    agent = make_agent()
+    agent.ai_service = MagicMock()
+    agent.ai_service.app_id = None
+    svc, _ = make_service(agent=agent)
+    ctx = make_context(agent=agent, user_context={"user_id": 42})
+    db = MagicMock()
+    events = []
+    svc._update_request_count = MagicMock(
+        side_effect=lambda *_: events.append("request_count")
+    )
+    db.commit.side_effect = lambda: events.append("commit")
+    mocker.patch(
+        "services.usage_tracking_service.UsageTrackingService.record_system_llm_call",
+        side_effect=lambda *_: events.append("usage"),
+    )
+
+    with patch("tools.agentTools.parse_agent_response", return_value="ok"):
+        await svc._finalize_turn(ctx, "ok", db)
+
+    assert events == ["request_count", "usage", "commit"]
+
+
 # ---------------------------------------------------------------------------
 # Agent not found — _prepare_turn raises 404
 # ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import type { SubmitEvent } from 'react';
 import { UserPlus } from 'lucide-react';
 import { adminService } from '../../services/admin';
 import type { User, UserListResponse } from '../../services/admin';
@@ -59,7 +60,7 @@ function UsersPage() {
     };
   }, [loadUsers]);
 
-  function handleSearch(e: React.FormEvent) {
+  function handleSearch(e: SubmitEvent) {
     e.preventDefault();
     setCurrentPage(1);
     setSubmittedSearchQuery(searchQuery.trim());
@@ -67,10 +68,10 @@ function UsersPage() {
 
   if (loading && users.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12" role="status">
+      <output className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" aria-hidden="true"></div>
         <span className="ml-2">Loading users...</span>
-      </div>
+      </output>
     );
   }
 

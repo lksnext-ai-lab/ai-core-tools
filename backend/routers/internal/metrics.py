@@ -2,6 +2,7 @@
 
 Three scopes share the same queries and response shapes:
   - system:  /admin/metrics/...                          (platform admins)
+  - admin app: /admin/apps/{app_id}/metrics/...          (platform admins)
   - app:     /apps/{app_id}/metrics/...                  (app administrators)
   - agent:   /apps/{app_id}/agents/{agent_id}/metrics/... (app editors)
 """
@@ -13,6 +14,7 @@ from lks_idprovider.models.auth import AuthContext
 from sqlalchemy.orm import Session
 
 from db.database import get_db
+from models.app import App
 from routers.controls.role_authorization import AppRole, require_min_role
 from routers.internal.admin import require_admin
 from schemas.metrics_schemas import (
@@ -55,7 +57,11 @@ def _register(prefix: str, guard: Callable, scope_of: Callable[..., MetricsScope
                          _: Annotated[object, Depends(guard)], range: RangeParam = "7d"):
         return MetricsQueryService.timeseries(db, scope, range)
 
-    @router.get(f"{prefix}/breakdown/{{dimension}}", response_model=BreakdownResponse)
+    @router.get(
+        f"{prefix}/breakdown/{{dimension}}",
+        response_model=BreakdownResponse,
+        responses={400: {"description": "Breakdown dimension is not available in this scope"}},
+    )
     async def breakdown(dimension: BreakdownDimension, db: DbSession,
                         scope: Annotated[MetricsScope, Depends(scope_of)],
                         _: Annotated[object, Depends(guard)], range: RangeParam = "7d"):
@@ -80,6 +86,16 @@ def _app_scope(app_id: int) -> MetricsScope:
     return MetricsScope(app_id=app_id)
 
 
+def _admin_app_scope(
+    app_id: int,
+    _: Annotated[AuthContext, Depends(require_admin)],
+    db: DbSession,
+) -> MetricsScope:
+    if not db.query(App.app_id).filter(App.app_id == app_id).first():
+        raise HTTPException(status_code=404, detail="App not found.")
+    return MetricsScope(app_id=app_id)
+
+
 def _agent_scope(app_id: int, agent_id: int, db: DbSession) -> MetricsScope:
     MetricsQueryService.check_agent_in_app(db, app_id, agent_id)
     return MetricsScope(app_id=app_id, agent_id=agent_id)
@@ -98,5 +114,6 @@ def _platform_admin(auth: Annotated[AuthContext, Depends(require_admin)]) -> Aut
 
 
 _register("/admin/metrics", _platform_admin, _system_scope, SYSTEM_DIMENSIONS)
+_register("/admin/apps/{app_id}/metrics", _platform_admin, _admin_app_scope, APP_DIMENSIONS)
 _register("/apps/{app_id}/metrics", _app_admin, _app_scope, APP_DIMENSIONS)
 _register("/apps/{app_id}/agents/{agent_id}/metrics", _app_editor, _agent_scope, AGENT_DIMENSIONS)

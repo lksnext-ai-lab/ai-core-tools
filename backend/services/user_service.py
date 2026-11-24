@@ -94,10 +94,9 @@ class UserService:
         return user_repo.get_by_email(email)
 
     @staticmethod
-    def get_user_accessible_apps(user_id: int):
+    def get_user_accessible_apps(db: Session, user_id: int) -> List[App]:
         """Get all apps user has access to (owned + collaborated)."""
-        # TODO: Implement this method
-        pass
+        return AppCollaborationRepository(db).get_user_accessible_apps(user_id)
 
     @staticmethod
     def get_all_users(db: Session, page: int = 1, per_page: int = 10) -> Tuple[List[Dict], int]:
@@ -185,9 +184,6 @@ class UserService:
             OmniadminDeletionError: Target is an omniadmin (→ 403).
             OwnedAppsPresentError: User owns apps and mode='block' (→ 409).
         """
-        # Lazy import — avoids circular dependency (app_service → child services → user_service).
-        from services.app_service import AppService
-
         logger = get_logger(__name__)
 
         # Acquire row lock on the target user (AD-6 — serialises concurrent delete requests).
@@ -205,6 +201,43 @@ class UserService:
         # (expire_on_commit=True), so a later attribute read would trigger a reload.
         user_email: str = user.email
 
+        UserService._assert_deletable(user_id, user_email, actor_user_id, logger)
+
+        # Emit start log AFTER guardrails — rejected requests must not appear as
+        # initiated deletions in the audit trail (NFR-6).
+        logger.info(
+            f"delete_user: start — user_id={user_id} mode={mode} actor_user_id={actor_user_id}"
+        )
+
+        owned_apps = AppRepository(db).get_by_owner(user_id)
+        if owned_apps:
+            UserService._handle_owned_apps(
+                db,
+                user_id,
+                owned_apps,
+                mode=mode,
+                actor_user_id=actor_user_id,
+                transfer_to_user_id=transfer_to_user_id,
+                logger=logger,
+            )
+
+        try:
+            UserService._remove_user_and_dependents(
+                db, user_id, mode=mode, actor_user_id=actor_user_id, logger=logger
+            )
+            return True
+        except Exception:
+            db.rollback()
+            logger.error(
+                f"delete_user: rollback — user_id={user_id} mode={mode} "
+                f"actor_user_id={actor_user_id}",
+                exc_info=True,
+            )
+            raise
+
+    @staticmethod
+    def _assert_deletable(user_id: int, user_email: str, actor_user_id: int, logger) -> None:
+        """Reject self-deletion and omniadmin targets before any state change."""
         if actor_user_id == user_id:
             logger.warning(
                 f"delete_user: self-deletion rejected — user_id={user_id}, actor_user_id={actor_user_id}"
@@ -217,169 +250,192 @@ class UserService:
             )
             raise OmniadminDeletionError(user_email)
 
-        # Emit start log AFTER guardrails — rejected requests must not appear as
-        # initiated deletions in the audit trail (NFR-6).
-        logger.info(
-            f"delete_user: start — user_id={user_id} mode={mode} actor_user_id={actor_user_id}"
-        )
-
-        app_repo = AppRepository(db)
-        owned_apps = app_repo.get_by_owner(user_id)
-
-        if owned_apps:
+    @staticmethod
+    def _handle_owned_apps(
+        db: Session,
+        user_id: int,
+        owned_apps: List[App],
+        *,
+        mode: str,
+        actor_user_id: int,
+        transfer_to_user_id: Optional[int],
+        logger,
+    ) -> None:
+        """Apply the owned-apps policy for ``mode``: block, transfer_apps or cascade_apps."""
+        if mode == "block":
             owned_app_summaries: List[OwnedAppSummary] = [
                 {"app_id": app.app_id, "name": app.name} for app in owned_apps
             ]
-
-            if mode == "block":
-                logger.warning(
-                    f"delete_user: owned-apps-present block — user_id={user_id} "
-                    f"owned_app_count={len(owned_apps)} actor_user_id={actor_user_id}"
-                )
-                raise OwnedAppsPresentError(owned_app_summaries)
-
-            if mode == "transfer_apps":
-                # AD-2: all reassignments + user deletion are one atomic transaction.
-                # Call _reassign_owner directly (NOT transfer_direct, which commits).
-                if transfer_to_user_id is None:
-                    raise TransferRecipientInvalidError(
-                        "transfer_to_user_id must be provided when mode='transfer_apps'."
-                    )
-
-                if transfer_to_user_id == user_id:
-                    raise TransferRecipientInvalidError(
-                        "transfer_to_user_id cannot be the same user that is being deleted."
-                    )
-
-                # Validate recipient once up front before touching any App row.
-                recipient = db.execute(
-                    select(User).where(User.user_id == transfer_to_user_id)
-                ).scalar_one_or_none()
-
-                if recipient is None:
-                    raise TransferRecipientInvalidError(
-                        f"User {transfer_to_user_id} does not exist."
-                    )
-
-                if not recipient.is_active:
-                    raise TransferRecipientInvalidError(
-                        f"User {transfer_to_user_id} is not active and cannot receive app ownership."
-                    )
-
-                from services.app_ownership_service import AppOwnershipService
-
-                # Re-fetch with row locks (AD-6) — the initial get_by_owner held no lock;
-                # _reassign_owner mutates owner_id so concurrent transfer_direct could race.
-                locked_owned_apps = db.execute(
-                    select(App).where(App.owner_id == user_id).with_for_update()
-                ).scalars().all()
-
-                try:
-                    for app in locked_owned_apps:
-                        logger.info(
-                            f"delete_user(transfer_apps): staging transfer of app_id={app.app_id} "
-                            f"'{app.name}' to user_id={transfer_to_user_id} for user_id={user_id}"
-                        )
-                        AppOwnershipService._reassign_owner(
-                            db,
-                            app,
-                            transfer_to_user_id,
-                            actor_user_id=actor_user_id,
-                        )
-                except Exception:
-                    db.rollback()
-                    logger.error(
-                        f"delete_user(transfer_apps): rollback — staged transfers reverted "
-                        f"for user_id={user_id} recipient={transfer_to_user_id} actor_user_id={actor_user_id}",
-                        exc_info=True,
-                    )
-                    raise
-
-            if mode == "cascade_apps":
-                # cascade_apps commits per-app. Delete user LAST so a failure mid-loop
-                # leaves the user intact with remaining owned apps (resumable — AD-2/AC-13).
-                app_svc = AppService(db)
-                for app in owned_apps:
-                    app_id_to_delete = app.app_id
-                    app_name = app.name
-                    logger.info(
-                        f"delete_user(cascade_apps): deleting owned app {app_id_to_delete} "
-                        f"'{app_name}' for user_id={user_id}"
-                    )
-                    success = app_svc.delete_app(app_id_to_delete)
-                    if not success:
-                        # False means "already gone" OR "failed mid-cascade". Distinguish:
-                        # if the app still exists this was a real failure — abort before
-                        # db.delete(user) to avoid orphaning the app.
-                        if app_repo.get_by_id(app_id_to_delete) is not None:
-                            logger.error(
-                                f"delete_user(cascade_apps): delete_app failed for "
-                                f"app_id={app_id_to_delete}; aborting before user deletion "
-                                f"to avoid orphaning the app."
-                            )
-                            raise RuntimeError(
-                                f"Failed to delete owned app {app_id_to_delete} during "
-                                f"cascade deletion of user {user_id}."
-                            )
-                        logger.warning(
-                            f"delete_user(cascade_apps): app_id={app_id_to_delete} already "
-                            f"absent — treating as concurrently removed and continuing"
-                        )
-
-        try:
-            # Re-acquire the row lock. cascade_apps per-app commits released the entry
-            # lock and expired `user`; re-locking prevents a delete-races-mutation window.
-            user = db.execute(
-                select(User).where(User.user_id == user_id).with_for_update()
-            ).scalar_one_or_none()
-            if user is None:
-                raise UserNotFoundError(user_id)
-
-            # Class C: remove collaboration memberships.
-            collab_repo = AppCollaborationRepository(db)
-            memberships = collab_repo.get_collaborations_by_user(user_id)
-            for membership in memberships:
-                logger.info(
-                    f"delete_user: removing collaboration id={membership.id} "
-                    f"app_id={membership.app_id} user_id={user_id}"
-                )
-                db.delete(membership)
-
-            db.flush()
-
-            # Class C: remove surviving API keys (owned-app keys already removed by
-            # delete_app; this catches keys held in other apps).
-            surviving_keys = db.execute(
-                select(APIKey).where(APIKey.user_id == user_id)
-            ).scalars().all()
-            for api_key in surviving_keys:
-                logger.info(
-                    f"delete_user: removing APIKey key_id={api_key.key_id} "
-                    f"app_id={api_key.app_id} user_id={user_id}"
-                )
-                db.delete(api_key)
-
-            db.flush()
-
-            # Class A (credentials, tokens, subscription) handled by DB ON DELETE CASCADE.
-            # Class D (invited_by, Conversation.user_id, etc.) handled by DB ON DELETE SET NULL.
-            # passive_deletes=True on all mapped relationships prevents ORM interference.
-            db.delete(user)
-            db.commit()
-
-            logger.info(
-                f"delete_user: complete — user_id={user_id} mode={mode} actor_user_id={actor_user_id}"
+            logger.warning(
+                f"delete_user: owned-apps-present block — user_id={user_id} "
+                f"owned_app_count={len(owned_apps)} actor_user_id={actor_user_id}"
             )
-            return True
+            raise OwnedAppsPresentError(owned_app_summaries)
 
+        if mode == "transfer_apps":
+            UserService._transfer_owned_apps(
+                db,
+                user_id,
+                transfer_to_user_id=transfer_to_user_id,
+                actor_user_id=actor_user_id,
+                logger=logger,
+            )
+        elif mode == "cascade_apps":
+            UserService._cascade_delete_owned_apps(db, user_id, owned_apps, logger=logger)
+
+    @staticmethod
+    def _validate_transfer_recipient(db: Session, user_id: int, transfer_to_user_id: Optional[int]) -> None:
+        """Ensure the transfer recipient is set, distinct from the target and an active user."""
+        if transfer_to_user_id is None:
+            raise TransferRecipientInvalidError(
+                "transfer_to_user_id must be provided when mode='transfer_apps'."
+            )
+
+        if transfer_to_user_id == user_id:
+            raise TransferRecipientInvalidError(
+                "transfer_to_user_id cannot be the same user that is being deleted."
+            )
+
+        recipient = db.execute(
+            select(User).where(User.user_id == transfer_to_user_id)
+        ).scalar_one_or_none()
+
+        if recipient is None:
+            raise TransferRecipientInvalidError(
+                f"User {transfer_to_user_id} does not exist."
+            )
+
+        if not recipient.is_active:
+            raise TransferRecipientInvalidError(
+                f"User {transfer_to_user_id} is not active and cannot receive app ownership."
+            )
+
+    @staticmethod
+    def _transfer_owned_apps(
+        db: Session,
+        user_id: int,
+        *,
+        transfer_to_user_id: Optional[int],
+        actor_user_id: int,
+        logger,
+    ) -> None:
+        """Reassign all apps owned by ``user_id`` within the caller's transaction (AD-2)."""
+        from services.app_ownership_service import AppOwnershipService
+
+        UserService._validate_transfer_recipient(db, user_id, transfer_to_user_id)
+
+        # Re-fetch with row locks (AD-6) — the initial get_by_owner held no lock;
+        # _reassign_owner mutates owner_id so concurrent transfer_direct could race.
+        locked_owned_apps = db.execute(
+            select(App).where(App.owner_id == user_id).with_for_update()
+        ).scalars().all()
+
+        # Call _reassign_owner directly (NOT transfer_direct, which commits).
+        try:
+            for app in locked_owned_apps:
+                logger.info(
+                    f"delete_user(transfer_apps): staging transfer of app_id={app.app_id} "
+                    f"'{app.name}' to user_id={transfer_to_user_id} for user_id={user_id}"
+                )
+                AppOwnershipService._reassign_owner(
+                    db,
+                    app,
+                    transfer_to_user_id,
+                    actor_user_id=actor_user_id,
+                )
         except Exception:
             db.rollback()
             logger.error(
-                f"delete_user: rollback — user_id={user_id} mode={mode} "
-                f"actor_user_id={actor_user_id}",
+                f"delete_user(transfer_apps): rollback — staged transfers reverted "
+                f"for user_id={user_id} recipient={transfer_to_user_id} actor_user_id={actor_user_id}",
                 exc_info=True,
             )
             raise
+
+    @staticmethod
+    def _cascade_delete_owned_apps(db: Session, user_id: int, owned_apps: List[App], *, logger) -> None:
+        """Delete owned apps one by one. Each delete commits, so the user is removed last (AD-2/AC-13)."""
+        # Lazy import — avoids circular dependency (app_service → child services → user_service).
+        from services.app_service import AppService
+
+        app_svc = AppService(db)
+        app_repo = AppRepository(db)
+        for app in owned_apps:
+            app_id_to_delete = app.app_id
+            app_name = app.name
+            logger.info(
+                f"delete_user(cascade_apps): deleting owned app {app_id_to_delete} "
+                f"'{app_name}' for user_id={user_id}"
+            )
+            success = app_svc.delete_app(app_id_to_delete)
+            if not success:
+                # False means "already gone" OR "failed mid-cascade". Distinguish:
+                # if the app still exists this was a real failure — abort before
+                # db.delete(user) to avoid orphaning the app.
+                if app_repo.get_by_id(app_id_to_delete) is not None:
+                    logger.error(
+                        f"delete_user(cascade_apps): delete_app failed for "
+                        f"app_id={app_id_to_delete}; aborting before user deletion "
+                        f"to avoid orphaning the app."
+                    )
+                    raise RuntimeError(
+                        f"Failed to delete owned app {app_id_to_delete} during "
+                        f"cascade deletion of user {user_id}."
+                    )
+                logger.warning(
+                    f"delete_user(cascade_apps): app_id={app_id_to_delete} already "
+                    f"absent — treating as concurrently removed and continuing"
+                )
+
+    @staticmethod
+    def _remove_user_and_dependents(db: Session, user_id: int, *, mode: str, actor_user_id: int, logger) -> None:
+        """Remove collaborations, surviving API keys and the user row in one commit.
+
+        The caller owns rollback on failure.
+        """
+        # Re-acquire the row lock. cascade_apps per-app commits released the entry
+        # lock and expired `user`; re-locking prevents a delete-races-mutation window.
+        user = db.execute(
+            select(User).where(User.user_id == user_id).with_for_update()
+        ).scalar_one_or_none()
+        if user is None:
+            raise UserNotFoundError(user_id)
+
+        # Class C: remove collaboration memberships.
+        collab_repo = AppCollaborationRepository(db)
+        memberships = collab_repo.get_collaborations_by_user(user_id)
+        for membership in memberships:
+            logger.info(
+                f"delete_user: removing collaboration id={membership.id} "
+                f"app_id={membership.app_id} user_id={user_id}"
+            )
+            db.delete(membership)
+
+        db.flush()
+
+        # Class C: remove surviving API keys (owned-app keys already removed by
+        # delete_app; this catches keys held in other apps).
+        surviving_keys = db.execute(
+            select(APIKey).where(APIKey.user_id == user_id)
+        ).scalars().all()
+        for api_key in surviving_keys:
+            logger.info(
+                f"delete_user: removing APIKey key_id={api_key.key_id} "
+                f"app_id={api_key.app_id} user_id={user_id}"
+            )
+            db.delete(api_key)
+
+        db.flush()
+
+        # Class A (credentials, tokens, subscription) handled by DB ON DELETE CASCADE.
+        # Class D (invited_by, Conversation.user_id, etc.) handled by DB ON DELETE SET NULL.
+        # passive_deletes=True on all mapped relationships prevents ORM interference.
+        db.delete(user)
+        db.commit()
+
+        logger.info(
+            f"delete_user: complete — user_id={user_id} mode={mode} actor_user_id={actor_user_id}"
+        )
 
     @staticmethod
     def get_user_stats(db: Session) -> Dict[str, Any]:

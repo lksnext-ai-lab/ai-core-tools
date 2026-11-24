@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode, SubmitEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -11,6 +11,8 @@ import {
   UserCheck,
 } from 'lucide-react';
 import Alert from '../../components/ui/Alert';
+import Modal from '../../components/ui/Modal';
+import { MetricsDashboard } from '../../components/metrics/MetricsDashboard';
 import DeleteUserDialog from '../../components/admin/DeleteUserDialog';
 import OneTimeLinkModal from '../../components/ui/OneTimeLinkModal';
 import { useConfirm } from '../../contexts/ConfirmContext';
@@ -21,6 +23,8 @@ import { useApiMutation } from '../../hooks/useApiMutation';
 import { ApiError } from '../../services/api';
 import { adminService, OwnedAppsError } from '../../services/admin';
 import type { AdminAppOption, AppAccessRole, User, UserDetail } from '../../services/admin';
+import { metricsApi } from '../../services/metrics';
+import type { BreakdownDimension } from '../../types/metrics';
 
 type DetailState =
   | { readonly userId: number | null; readonly status: 'loading' }
@@ -34,6 +38,7 @@ interface ResetLinkState {
 }
 
 const appAccessRoles: AppAccessRole[] = ['administrator', 'editor', 'viewer'];
+const appMetricsDimensions: BreakdownDimension[] = ['agent', 'model', 'channel', 'user', 'provider'];
 
 function isAppAccessRole(role: string): role is AppAccessRole {
   return role === 'administrator' || role === 'editor' || role === 'viewer';
@@ -63,6 +68,28 @@ function appLabel(appName: string | null, appId: number): string {
   return appName || `app ${appId}`;
 }
 
+function AdminAppMetricsModal({
+  appId,
+  appName,
+  onClose,
+}: {
+  readonly appId: number;
+  readonly appName: string;
+  readonly onClose: () => void;
+}) {
+  const api = useMemo(() => metricsApi.adminApp(appId), [appId]);
+  return (
+    <Modal isOpen onClose={onClose} title={`Metrics · ${appName}`} size="xlarge">
+      <MetricsDashboard
+        api={api}
+        dimensions={appMetricsDimensions}
+        title={`App ${appId} metrics`}
+        description="Read-only usage, performance and reliability metrics for this app."
+      />
+    </Modal>
+  );
+}
+
 function SectionCard({ title, description, children }: SectionCardProps) {
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
@@ -71,6 +98,651 @@ function SectionCard({ title, description, children }: SectionCardProps) {
       {children}
     </section>
   );
+}
+
+const labelClass = 'text-sm text-gray-500 dark:text-slate-400';
+const valueClass = 'mt-1 break-words text-sm font-medium text-gray-900 dark:text-slate-100';
+
+type DetailIdentity = UserDetail['identity'];
+type DetailFallbackState = Exclude<DetailState, { readonly status: 'success' }>;
+
+function BackToUsersLink() {
+  return (
+    <Link
+      to="/admin/users"
+      className="inline-flex items-center gap-2 rounded text-sm font-medium text-blue-700 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-blue-300 dark:hover:text-blue-200"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+      Return to users
+    </Link>
+  );
+}
+
+function DetailFallback({ state, onRetry }: { readonly state: DetailFallbackState; readonly onRetry: () => void }) {
+  if (state.status === 'loading') {
+    return (
+      <div className="mx-auto max-w-5xl space-y-5">
+        <BackToUsersLink />
+        <output className="flex items-center justify-center gap-3 py-12 text-gray-700 dark:text-slate-300">
+          <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" aria-hidden="true" />
+          <span>Loading user details…</span>
+        </output>
+      </div>
+    );
+  }
+
+  if (state.status === 'not-found') {
+    return (
+      <div className="mx-auto max-w-5xl space-y-5">
+        <BackToUsersLink />
+        <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-slate-100">User not found</h1>
+          <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
+            This user may have been removed or the address may be invalid.
+          </p>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-5">
+      <BackToUsersLink />
+      <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+          <h1 className="font-semibold">Unable to load user details</h1>
+          <p className="mt-1">{state.message}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        >
+          Try again
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function OwnedAppsSection({
+  apps,
+  onOpenMetrics,
+}: {
+  readonly apps: UserDetail['owned_apps'];
+  readonly onOpenMetrics: (appId: number, appName: string | null) => void;
+}) {
+  return (
+    <SectionCard
+      title={`Owned apps (${apps.length})`}
+      description="Apps this user owns. A paused app may be unavailable because the owner's plan limit was exceeded."
+    >
+      {apps.length === 0 ? (
+        <p className="text-sm text-gray-600 dark:text-slate-400">This user does not own any apps.</p>
+      ) : (
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {apps.map((app) => (
+            <li key={app.app_id} className="group relative cursor-pointer rounded-lg border border-gray-200 p-4 transition-shadow hover:border-blue-400 hover:shadow-md dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => onOpenMetrics(app.app_id, app.name)}
+                aria-label={`View metrics for ${appLabel(app.name, app.app_id)}`}
+                className="absolute inset-0 z-10 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset"
+              />
+              <h3 className="font-semibold text-blue-700 group-hover:underline dark:text-blue-300">{unavailable(app.name)}</h3>
+              <dl className="mt-3 grid grid-cols-2 gap-3">
+                <div><dt className={labelClass}>App ID</dt><dd className={valueClass}>{app.app_id}</dd></div>
+                <div>
+                  <dt className={labelClass}>App availability</dt>
+                  <dd className={valueClass}>{app.is_frozen ? 'Paused by plan limit' : 'Available'}</dd>
+                </div>
+              </dl>
+              {app.is_frozen && (
+                <p className="mt-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
+                  This app is paused because the owner's plan allows fewer apps than they currently own.
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
+  );
+}
+
+interface AppMembershipsSectionProps {
+  readonly identity: DetailIdentity;
+  readonly onOpenMetrics: (appId: number, appName: string | null) => void;
+  readonly collaborations: UserDetail['collaborations'];
+  readonly actionsRestricted: boolean;
+  readonly pendingAction: string | null;
+  readonly adminAppsError: string | null;
+  readonly adminAppsCount: number;
+  readonly selectableApps: AdminAppOption[];
+  readonly allowedAppRoles: AppAccessRole[];
+  readonly selectedAppId: string;
+  readonly selectedGrantRole: AppAccessRole;
+  readonly onSelectedAppIdChange: (appId: string) => void;
+  readonly onSelectedAppRoleChange: (role: AppAccessRole) => void;
+  readonly onGrantAccess: (event: SubmitEvent<HTMLFormElement>) => Promise<void>;
+  readonly onSetAppRole: (appId: number, role: AppAccessRole) => Promise<void>;
+  readonly onRemoveAppAccess: (appId: number, appName: string | null) => Promise<void>;
+}
+
+function AppMembershipsSection({
+  identity,
+  onOpenMetrics,
+  collaborations,
+  actionsRestricted,
+  pendingAction,
+  adminAppsError,
+  adminAppsCount,
+  selectableApps,
+  allowedAppRoles,
+  selectedAppId,
+  selectedGrantRole,
+  onSelectedAppIdChange,
+  onSelectedAppRoleChange,
+  onGrantAccess,
+  onSetAppRole,
+  onRemoveAppAccess,
+}: AppMembershipsSectionProps) {
+  return (
+    <SectionCard
+      title={`App memberships (${collaborations.length})`}
+      description="Roles here apply only to the named app; they do not change platform access."
+    >
+      {actionsRestricted ? (
+        <output className="mb-4 block text-sm text-gray-700 dark:text-slate-300">
+          App access cannot be changed for your own or a protected omniadmin account.
+        </output>
+      ) : (
+        <>
+          {identity.platform_role === 'viewer' && (
+            <Alert
+              type="warning"
+              title="Viewer platform role"
+              message="This user has the Viewer platform role, so only Viewer app access can be granted. Change their platform role to Editor or Admin first to assign Editor or Administrator app access."
+              className="mb-4"
+            />
+          )}
+          <form onSubmit={(event) => { void onGrantAccess(event); }} className="mb-5 flex flex-wrap items-end gap-3 rounded-lg bg-gray-50 p-4 dark:bg-slate-900/50">
+            <label className="min-w-48 flex-1 text-sm font-medium text-gray-700 dark:text-slate-300">
+              <span className="block">App</span>
+              <select
+                value={selectedAppId}
+                onChange={(event) => onSelectedAppIdChange(event.target.value)}
+                disabled={pendingAction !== null || selectableApps.length === 0}
+                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              >
+                <option value="">Select an app</option>
+                {selectableApps.map((app) => (
+                  <option key={app.app_id} value={app.app_id}>
+                    {app.name || `App ${app.app_id}`} (ID {app.app_id})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm font-medium text-gray-700 dark:text-slate-300">
+              <span className="block">Role</span>
+              <select
+                value={selectedGrantRole}
+                onChange={(event) => {
+                  if (isAppAccessRole(event.target.value)) onSelectedAppRoleChange(event.target.value);
+                }}
+                disabled={pendingAction !== null}
+                className="mt-1 block rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              >
+                {allowedAppRoles.map((role) => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="submit"
+              disabled={pendingAction !== null || selectedAppId === ''}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Grant access
+            </button>
+            {adminAppsError && <p className="w-full text-sm text-red-700 dark:text-red-300" role="alert">{adminAppsError}</p>}
+            {!adminAppsError && adminAppsCount === 0 && (
+              <p className="w-full text-sm text-gray-600 dark:text-slate-400">No apps are available.</p>
+            )}
+            {!adminAppsError && adminAppsCount > 0 && selectableApps.length === 0 && (
+              <p className="w-full text-sm text-gray-600 dark:text-slate-400">This user already owns or has access to every app.</p>
+            )}
+          </form>
+        </>
+      )}
+      {collaborations.length === 0 ? (
+        <p className="text-sm text-gray-600 dark:text-slate-400">This user has no app collaborations.</p>
+      ) : (
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {collaborations.map((membership) => (
+            <li key={membership.collaboration_id} className="group relative cursor-pointer rounded-lg border border-gray-200 p-4 transition-shadow hover:border-blue-400 hover:shadow-md dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => onOpenMetrics(membership.app_id, membership.app_name)}
+                aria-label={`View metrics for ${appLabel(membership.app_name, membership.app_id)}`}
+                className="absolute inset-0 z-10 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset"
+              />
+              <h3 className="font-semibold text-blue-700 group-hover:underline dark:text-blue-300">{unavailable(membership.app_name)}</h3>
+              <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div><dt className={labelClass}>App ID</dt><dd className={valueClass}>{membership.app_id}</dd></div>
+                <div><dt className={labelClass}>Collaboration role</dt><dd className={valueClass}>{membership.role}</dd></div>
+                <div><dt className={labelClass}>Status</dt><dd className={valueClass}>{membership.status}</dd></div>
+                <div>
+                  <dt className={labelClass}>Member access</dt>
+                  <dd className={valueClass}>{membership.is_frozen ? 'Paused by app plan limit' : 'Available'}</dd>
+                </div>
+                <div><dt className={labelClass}>Invited</dt><dd className={valueClass}>{formatDate(membership.invited_at)}</dd></div>
+                <div><dt className={labelClass}>Accepted</dt><dd className={valueClass}>{formatDate(membership.accepted_at)}</dd></div>
+              </dl>
+              {membership.is_frozen && (
+                <p className="mt-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
+                  This member's access is paused because the app has exceeded its plan's collaborator limit.
+                </p>
+              )}
+              {!actionsRestricted && (
+                <div className="relative z-20 mt-4 flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3 dark:border-slate-700">
+                  <label className="text-sm text-gray-700 dark:text-slate-300">
+                    <span className="mr-2">Set role</span>
+                    <select
+                      aria-label={`Role for ${appLabel(membership.app_name, membership.app_id)}`}
+                      value={membership.role}
+                      onChange={(event) => {
+                        if (isAppAccessRole(event.target.value) && allowedAppRoles.includes(event.target.value)) {
+                          void onSetAppRole(membership.app_id, event.target.value);
+                        }
+                      }}
+                      disabled={pendingAction !== null}
+                      className="ml-2 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                    >
+                      {(!isAppAccessRole(membership.role) || !allowedAppRoles.includes(membership.role)) && (
+                        <option value={membership.role}>{membership.role} (legacy)</option>
+                      )}
+                      {allowedAppRoles.map((role) => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => { void onRemoveAppAccess(membership.app_id, membership.app_name); }}
+                    disabled={pendingAction !== null}
+                    className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
+                  >
+                    Remove access
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
+  );
+}
+
+interface ApiKeysSectionProps {
+  readonly apiKeys: UserDetail['api_keys'];
+  readonly actionsRestricted: boolean;
+  readonly pendingAction: string | null;
+  readonly onSetAPIKeyStatus: (keyId: number, keyName: string, isActive: boolean) => Promise<void>;
+}
+
+function ApiKeysSection({ apiKeys, actionsRestricted, pendingAction, onSetAPIKeyStatus }: ApiKeysSectionProps) {
+  return (
+    <SectionCard
+      title={`API keys (${apiKeys.length})`}
+      description="Keys are shown as metadata only. The secret value is never returned or displayed here."
+    >
+      {apiKeys.length === 0 ? (
+        <p className="text-sm text-gray-600 dark:text-slate-400">This user has no API keys.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+            <thead className="bg-gray-50 dark:bg-slate-700">
+              <tr>
+                {['Name', 'Key ID', 'App', 'Status', 'Created', 'Last used', 'Actions'].map((heading) => (
+                  <th key={heading} scope="col" className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">{heading}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
+              {apiKeys.map((key) => (
+                <tr key={key.key_id}>
+                  <td className="px-3 py-3 text-sm text-gray-900 dark:text-slate-100">{key.name}</td>
+                  <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{key.key_id}</td>
+                  <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{unavailable(key.app_name)} (ID {key.app_id})</td>
+                  <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{key.is_active ? 'Active' : 'Inactive'}</td>
+                  <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{formatDate(key.created_at)}</td>
+                  <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{key.last_used_at ? formatDate(key.last_used_at) : 'Never used'}</td>
+                  <td className="px-3 py-3 text-sm">
+                    {actionsRestricted ? (
+                      <span className="text-gray-500 dark:text-slate-400">Unavailable</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { void onSetAPIKeyStatus(key.key_id, key.name, !key.is_active); }}
+                        disabled={pendingAction !== null}
+                        aria-label={`${key.is_active ? 'Deactivate' : 'Reactivate'} API key ${key.name}`}
+                        className="rounded-md border border-gray-300 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                      >
+                        {key.is_active ? 'Deactivate' : 'Reactivate'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+interface EditAccountSectionProps {
+  readonly identity: DetailIdentity;
+  readonly isSelf: boolean;
+  readonly actionsRestricted: boolean;
+  readonly isLocalMode: boolean;
+  readonly canResetQuota: boolean;
+  readonly ownedAppCount: number;
+  readonly pendingAction: string | null;
+  readonly onSetPlatformRole: (role: 'viewer' | 'editor' | 'admin') => Promise<void>;
+  readonly onDeactivate: () => Promise<void>;
+  readonly onActivate: () => Promise<void>;
+  readonly onResetLink: () => Promise<void>;
+  readonly onResetQuota: () => Promise<void>;
+  readonly onDelete: () => Promise<void>;
+}
+
+function PlatformRoleControl({
+  identity,
+  pendingAction,
+  onSetPlatformRole,
+}: Pick<EditAccountSectionProps, 'identity' | 'pendingAction' | 'onSetPlatformRole'>) {
+  return (
+    <section className="rounded-xl bg-gray-50 p-4 dark:bg-slate-900/50" aria-labelledby="platform-role-actions">
+      <h3 id="platform-role-actions" className="font-semibold text-gray-900 dark:text-slate-100">Platform role</h3>
+      <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
+        Current role: <span className="font-semibold capitalize text-gray-900 dark:text-slate-100">{unavailable(identity.platform_role)}</span>
+      </p>
+      <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-slate-400">
+        Viewer: read-only access. Editor: can create and edit resources. Admin: can manage platform users and settings. These settings do not change app membership roles.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {(['viewer', 'editor', 'admin'] as const).map((role) => (
+          <button
+            key={role}
+            type="button"
+            onClick={() => { void onSetPlatformRole(role); }}
+            disabled={pendingAction !== null || identity.platform_role === role}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium capitalize text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
+          >
+            <Shield className="h-4 w-4" aria-hidden="true" />
+            {pendingAction === 'Updating role' ? 'Updating…' : `Set ${role}`}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SignInAccessControl({
+  identity,
+  pendingAction,
+  onDeactivate,
+  onActivate,
+}: Pick<EditAccountSectionProps, 'identity' | 'pendingAction' | 'onDeactivate' | 'onActivate'>) {
+  return (
+    <section className="rounded-xl bg-gray-50 p-4 dark:bg-slate-900/50" aria-labelledby="account-status-actions">
+      <h3 id="account-status-actions" className="font-semibold text-gray-900 dark:text-slate-100">Sign-in access</h3>
+      <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-slate-400">
+        Deactivating blocks the account from signing in. Reactivate it to restore sign-in access.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {identity.is_active ? (
+          <button
+            type="button"
+            onClick={() => { void onDeactivate(); }}
+            disabled={pendingAction !== null}
+            className="inline-flex items-center gap-2 rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/30"
+          >
+            <Ban className="h-4 w-4" aria-hidden="true" />
+            {pendingAction === 'Deactivating user' ? 'Deactivating…' : 'Deactivate'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => { void onActivate(); }}
+            disabled={pendingAction !== null}
+            className="inline-flex items-center gap-2 rounded-lg border border-green-300 px-3 py-2 text-sm font-medium text-green-800 hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-700 dark:text-green-200 dark:hover:bg-green-900/30"
+          >
+            <UserCheck className="h-4 w-4" aria-hidden="true" />
+            {pendingAction === 'Activating user' ? 'Activating…' : 'Activate'}
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PasswordAssistanceControl({
+  pendingAction,
+  onResetLink,
+}: Pick<EditAccountSectionProps, 'pendingAction' | 'onResetLink'>) {
+  return (
+    <section className="rounded-xl bg-gray-50 p-4 dark:bg-slate-900/50" aria-labelledby="password-reset-actions">
+      <h3 id="password-reset-actions" className="font-semibold text-gray-900 dark:text-slate-100">Password assistance</h3>
+      <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-slate-400">
+        Generate a one-time link for this local account to set a new password. The link is shown once.
+      </p>
+      <button
+        type="button"
+        onClick={() => { void onResetLink(); }}
+        disabled={pendingAction !== null}
+        className="mt-3 inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
+      >
+        <Link2 className="h-4 w-4" aria-hidden="true" />
+        {pendingAction === 'reset-link' ? 'Generating link…' : 'Generate reset link'}
+      </button>
+    </section>
+  );
+}
+
+function MarketplaceQuotaControl({
+  pendingAction,
+  onResetQuota,
+}: Pick<EditAccountSectionProps, 'pendingAction' | 'onResetQuota'>) {
+  return (
+    <section className="rounded-xl bg-gray-50 p-4 dark:bg-slate-900/50" aria-labelledby="marketplace-quota-actions">
+      <h3 id="marketplace-quota-actions" className="font-semibold text-gray-900 dark:text-slate-100">Marketplace quota</h3>
+      <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-slate-400">
+        Reset only the user's marketplace invocation quota. This does not change the system LLM-call count shown above.
+      </p>
+      <button
+        type="button"
+        onClick={() => { void onResetQuota(); }}
+        disabled={pendingAction !== null}
+        className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
+      >
+        <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+        {pendingAction === 'Resetting marketplace quota' ? 'Resetting quota…' : 'Reset marketplace quota'}
+      </button>
+    </section>
+  );
+}
+
+function DeleteAccountControl({
+  ownedAppCount,
+  pendingAction,
+  onDelete,
+}: Pick<EditAccountSectionProps, 'ownedAppCount' | 'pendingAction' | 'onDelete'>) {
+  return (
+    <section className="rounded-xl border border-red-200 bg-red-50/70 p-4 dark:border-red-900 dark:bg-red-950/20" aria-labelledby="delete-user-action">
+      <h3 id="delete-user-action" className="font-semibold text-red-900 dark:text-red-200">Delete account</h3>
+      <p className="mt-1 text-sm leading-5 text-red-800 dark:text-red-300">
+        Permanently remove this account. If the user owns apps, you will be asked to transfer them or confirm deleting them too.
+      </p>
+      <button
+        type="button"
+        onClick={() => { void onDelete(); }}
+        disabled={pendingAction !== null}
+        className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:text-red-200 dark:hover:bg-red-900/30"
+      >
+        <Trash2 className="h-4 w-4" aria-hidden="true" />
+        {pendingAction === 'delete' ? 'Deleting…' : 'Delete user'}
+      </button>
+      {ownedAppCount > 0 && <p className="mt-2 text-sm font-medium text-red-800 dark:text-red-300">This user currently owns {ownedAppCount} app{ownedAppCount === 1 ? '' : 's'}.</p>}
+    </section>
+  );
+}
+
+function EditAccountSection({
+  identity,
+  isSelf,
+  actionsRestricted,
+  isLocalMode,
+  canResetQuota,
+  ownedAppCount,
+  pendingAction,
+  onSetPlatformRole,
+  onDeactivate,
+  onActivate,
+  onResetLink,
+  onResetQuota,
+  onDelete,
+}: EditAccountSectionProps) {
+  return (
+    <SectionCard
+      title="Edit account"
+      description="Administrative actions are performed here so the account and its relationships can be reviewed before making changes."
+    >
+      {actionsRestricted ? (
+        <output className="block text-sm text-gray-700 dark:text-slate-300">
+          {isSelf ? 'Actions are unavailable for your own account.' : 'This protected omniadmin account cannot be changed here.'}
+        </output>
+      ) : (
+        <div className="space-y-6">
+          <PlatformRoleControl identity={identity} pendingAction={pendingAction} onSetPlatformRole={onSetPlatformRole} />
+          <SignInAccessControl identity={identity} pendingAction={pendingAction} onDeactivate={onDeactivate} onActivate={onActivate} />
+          {isLocalMode && identity.auth_method === 'local' && (
+            <PasswordAssistanceControl pendingAction={pendingAction} onResetLink={onResetLink} />
+          )}
+          {canResetQuota && <MarketplaceQuotaControl pendingAction={pendingAction} onResetQuota={onResetQuota} />}
+          <DeleteAccountControl ownedAppCount={ownedAppCount} pendingAction={pendingAction} onDelete={onDelete} />
+          {pendingAction && <p className="text-sm text-gray-600 dark:text-slate-400">{pendingAction}…</p>}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function UserHeader({ identity, displayName }: { readonly identity: DetailIdentity; readonly displayName: string }) {
+  return (
+    <header className="overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-6 shadow-sm dark:border-slate-700 dark:from-slate-800 dark:via-slate-800 dark:to-indigo-950">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-xl font-bold text-white shadow-sm dark:bg-blue-500" aria-hidden="true">
+            {(identity.name?.trim().charAt(0) || identity.email?.trim().charAt(0) || '?').toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Platform user</p>
+            <h1 className="mt-1 break-words text-2xl font-bold text-gray-950 dark:text-white">{displayName}</h1>
+            <p className="mt-1 break-all text-sm text-gray-600 dark:text-slate-300">{unavailable(identity.email)}</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">User ID {identity.user_id}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-semibold ${
+            identity.is_active
+              ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/30 dark:text-green-200'
+              : 'border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-200'
+          }`}>
+            {identity.is_active ? 'Account active' : 'Account inactive'}
+          </span>
+          {identity.is_omniadmin && (
+            <span className="inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-3 py-1.5 text-sm font-semibold text-purple-800 dark:border-purple-800 dark:bg-purple-900/30 dark:text-purple-200">
+              Omniadmin
+            </span>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function UserSummaryCards({ detail }: { readonly detail: UserDetail }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {[
+        { label: 'Owned apps', value: detail.owned_apps.length, detail: 'Apps owned by this user' },
+        { label: 'App memberships', value: detail.collaborations.length, detail: 'Invitations and memberships' },
+        { label: 'API keys', value: detail.api_keys.length, detail: 'Keys owned by this user' },
+        { label: 'System LLM calls', value: detail.usage?.call_count ?? 0, detail: `Since ${formatDate(detail.usage?.billing_period_start)}` },
+      ].map((item) => (
+        <div key={item.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <p className="text-sm font-medium text-gray-600 dark:text-slate-400">{item.label}</p>
+          <p className="mt-2 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">{item.value}</p>
+          <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{item.detail}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function IdentitySection({ identity }: { readonly identity: DetailIdentity }) {
+  return (
+    <SectionCard
+      title="Identity and account"
+      description="Account identity and sign-in information. Missing values are shown as unavailable rather than inferred."
+    >
+      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div><dt className={labelClass}>User ID</dt><dd className={valueClass}>{identity.user_id}</dd></div>
+        <div><dt className={labelClass}>Name</dt><dd className={valueClass}>{unavailable(identity.name)}</dd></div>
+        <div><dt className={labelClass}>Email</dt><dd className={valueClass}>{unavailable(identity.email)}</dd></div>
+        <div><dt className={labelClass}>Created</dt><dd className={valueClass}>{formatDate(identity.created_at)}</dd></div>
+        <div><dt className={labelClass}>Authentication method</dt><dd className={valueClass}>{unavailable(identity.auth_method)}</dd></div>
+        <div>
+          <dt className={labelClass}>Email verification</dt>
+          <dd className={valueClass}>{identity.email_verified ? 'Verified' : 'Not verified'}</dd>
+        </div>
+      </dl>
+    </SectionCard>
+  );
+}
+
+function deriveAccessState(detail: UserDetail, adminApps: AdminAppOption[], selectedAppRole: AppAccessRole) {
+  const memberAppIds = new Set(
+    detail.collaborations
+      .filter((membership) => membership.role !== 'owner' && membership.status === 'accepted')
+      .map((membership) => membership.app_id),
+  );
+  const ownedAppIds = new Set(detail.owned_apps.map((app) => app.app_id));
+  const allowedAppRoles = getAllowedAppRoles(detail.identity.platform_role);
+  return {
+    hasPausedAccess: detail.owned_apps.some((app) => app.is_frozen) || detail.collaborations.some((membership) => membership.is_frozen),
+    selectableApps: adminApps.filter((app) => !memberAppIds.has(app.app_id) && !ownedAppIds.has(app.app_id)),
+    allowedAppRoles,
+    selectedGrantRole: allowedAppRoles.includes(selectedAppRole) ? selectedAppRole : 'viewer',
+  };
+}
+
+function buildDeleteDialogUser(identity: DetailIdentity, source: UserDetail): User {
+  return {
+    user_id: identity.user_id,
+    email: identity.email ?? 'Unavailable',
+    name: identity.name ?? undefined,
+    created_at: identity.created_at ?? '',
+    owned_apps_count: source.owned_apps.length,
+    api_keys_count: source.api_keys.length,
+    is_active: identity.is_active,
+    is_omniadmin: identity.is_omniadmin,
+  };
 }
 
 function UserDetailPage() {
@@ -94,6 +766,7 @@ function UserDetailPage() {
   const [adminAppsError, setAdminAppsError] = useState<string | null>(null);
   const [selectedAppId, setSelectedAppId] = useState('');
   const [selectedAppRole, setSelectedAppRole] = useState<AppAccessRole>('editor');
+  const [selectedMetricsApp, setSelectedMetricsApp] = useState<AdminAppOption | null>(null);
   const requestIdRef = useRef(0);
   const actionLockRef = useRef(false);
   const routeUserIdRef = useRef(userId);
@@ -144,6 +817,7 @@ function UserDetailPage() {
   }, []);
 
   useEffect(() => {
+    setSelectedMetricsApp(null);
     setResetLinkState(null);
     setDeleteDialogUser(null);
     setActionError(null);
@@ -170,6 +844,10 @@ function UserDetailPage() {
     return () => {
       active = false;
     };
+  }, []);
+
+  const openAppMetrics = useCallback((appId: number, appName: string | null) => {
+    setSelectedMetricsApp({ app_id: appId, name: appName });
   }, []);
 
   const visibleState: DetailState =
@@ -226,6 +904,7 @@ function UserDetailPage() {
       admin: 'Admin',
     };
     const downgradeWarning = role === 'viewer' && ownedAppCount > 0;
+    const appNoun = ownedAppCount === 1 ? 'app' : 'apps';
     await runMutation(
       identity.user_id,
       'Updating role',
@@ -234,7 +913,7 @@ function UserDetailPage() {
       {
         title: `Set role to ${roleLabels[role]}?`,
         message: downgradeWarning
-          ? `${displayName} owns ${ownedAppCount} app${ownedAppCount === 1 ? '' : 's'}. As a viewer, they will no longer be able to modify them but will retain ownership. Continue?`
+          ? `${displayName} owns ${ownedAppCount} ${appNoun}. As a viewer, they will no longer be able to modify them but will retain ownership. Continue?`
           : `Change ${displayName}'s platform role to ${roleLabels[role]}?`,
         variant: downgradeWarning ? 'warning' : undefined,
         confirmLabel: 'Confirm',
@@ -242,7 +921,7 @@ function UserDetailPage() {
     );
   }
 
-  async function handleGrantAppAccess(event: FormEvent<HTMLFormElement>): Promise<void> {
+  async function handleGrantAppAccess(event: SubmitEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!identity || !selectedAppId) return;
     const role = identity.platform_role === 'viewer' ? 'viewer' : selectedAppRole;
@@ -366,16 +1045,7 @@ function UserDetailPage() {
     if (!identity) {
       throw new Error('A loaded user is required to open the delete dialog.');
     }
-    return {
-      user_id: identity.user_id,
-      email: identity.email ?? 'Unavailable',
-      name: identity.name ?? undefined,
-      created_at: identity.created_at ?? '',
-      owned_apps_count: source.owned_apps.length,
-      api_keys_count: source.api_keys.length,
-      is_active: identity.is_active,
-      is_omniadmin: identity.is_omniadmin,
-    };
+    return buildDeleteDialogUser(identity, source);
   }
 
   async function handleDelete(): Promise<void> {
@@ -430,128 +1100,20 @@ function UserDetailPage() {
     }
   }
 
-  if (visibleState.status === 'loading') {
-    return (
-      <div className="mx-auto max-w-5xl space-y-5">
-        <Link
-          to="/admin/users"
-          className="inline-flex items-center gap-2 rounded text-sm font-medium text-blue-700 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-blue-300 dark:hover:text-blue-200"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Return to users
-        </Link>
-        <div className="flex items-center justify-center gap-3 py-12 text-gray-700 dark:text-slate-300" role="status">
-          <span className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" aria-hidden="true" />
-          <span>Loading user details…</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (visibleState.status === 'not-found') {
-    return (
-      <div className="mx-auto max-w-5xl space-y-5">
-        <Link
-          to="/admin/users"
-          className="inline-flex items-center gap-2 rounded text-sm font-medium text-blue-700 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-blue-300 dark:hover:text-blue-200"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Return to users
-        </Link>
-        <section className="rounded-lg border border-gray-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-slate-100">User not found</h1>
-          <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
-            This user may have been removed or the address may be invalid.
-          </p>
-        </section>
-      </div>
-    );
-  }
-
-  if (visibleState.status === 'error') {
-    return (
-      <div className="mx-auto max-w-5xl space-y-5">
-        <Link
-          to="/admin/users"
-          className="inline-flex items-center gap-2 rounded text-sm font-medium text-blue-700 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-blue-300 dark:hover:text-blue-200"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Return to users
-        </Link>
-        <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
-          <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
-            <h1 className="font-semibold">Unable to load user details</h1>
-            <p className="mt-1">{visibleState.message}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => { void loadDetail(); }}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            Try again
-          </button>
-        </section>
-      </div>
-    );
+  if (visibleState.status !== 'success') {
+    return <DetailFallback state={visibleState} onRetry={() => { void loadDetail(); }} />;
   }
 
   if (!detail || !identity) return null;
 
-  const labelClass = 'text-sm text-gray-500 dark:text-slate-400';
-  const valueClass = 'mt-1 break-words text-sm font-medium text-gray-900 dark:text-slate-100';
-  const hasFrozenApps = detail.owned_apps.some((app) => app.is_frozen);
-  const hasFrozenCollaborations = detail.collaborations.some((membership) => membership.is_frozen);
-  const memberAppIds = new Set(
-    detail.collaborations
-      .filter((membership) => membership.role !== 'owner' && membership.status === 'accepted')
-      .map((membership) => membership.app_id),
-  );
-  const ownedAppIds = new Set(detail.owned_apps.map((app) => app.app_id));
-  const selectableApps = adminApps.filter(
-    (app) => !memberAppIds.has(app.app_id) && !ownedAppIds.has(app.app_id),
-  );
-  const allowedAppRoles = getAllowedAppRoles(identity.platform_role);
-  const selectedGrantRole = allowedAppRoles.includes(selectedAppRole) ? selectedAppRole : 'viewer';
+  const access = deriveAccessState(detail, adminApps, selectedAppRole);
+  const { allowedAppRoles, selectedGrantRole } = access;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <Link
-        to="/admin/users"
-        className="inline-flex items-center gap-2 rounded text-sm font-medium text-blue-700 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-blue-300 dark:hover:text-blue-200"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        Return to users
-      </Link>
+      <BackToUsersLink />
 
-      <header className="overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-6 shadow-sm dark:border-slate-700 dark:from-slate-800 dark:via-slate-800 dark:to-indigo-950">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-xl font-bold text-white shadow-sm dark:bg-blue-500" aria-hidden="true">
-              {(identity.name?.trim().charAt(0) || identity.email?.trim().charAt(0) || '?').toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Platform user</p>
-              <h1 className="mt-1 break-words text-2xl font-bold text-gray-950 dark:text-white">{displayName}</h1>
-              <p className="mt-1 break-all text-sm text-gray-600 dark:text-slate-300">{unavailable(identity.email)}</p>
-              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">User ID {identity.user_id}</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2 sm:justify-end">
-            <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-semibold ${
-              identity.is_active
-                ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/30 dark:text-green-200'
-                : 'border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-200'
-            }`}>
-              {identity.is_active ? 'Account active' : 'Account inactive'}
-            </span>
-            {identity.is_omniadmin && (
-              <span className="inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-3 py-1.5 text-sm font-semibold text-purple-800 dark:border-purple-800 dark:bg-purple-900/30 dark:text-purple-200">
-                Omniadmin
-              </span>
-            )}
-          </div>
-        </div>
-      </header>
+      <UserHeader identity={identity} displayName={displayName} />
 
       <div role="status" aria-live="polite" className="sr-only">
         {pendingAction ? `${pendingAction} in progress` : actionSuccess ?? ''}
@@ -563,22 +1125,9 @@ function UserDetailPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
-          { label: 'Owned apps', value: detail.owned_apps.length, detail: 'Apps owned by this user' },
-          { label: 'App memberships', value: detail.collaborations.length, detail: 'Invitations and memberships' },
-          { label: 'API keys', value: detail.api_keys.length, detail: 'Keys owned by this user' },
-          { label: 'System LLM calls', value: detail.usage?.call_count ?? 0, detail: `Since ${formatDate(detail.usage?.billing_period_start)}` },
-        ].map((item) => (
-          <div key={item.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-            <p className="text-sm font-medium text-gray-600 dark:text-slate-400">{item.label}</p>
-            <p className="mt-2 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">{item.value}</p>
-            <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{item.detail}</p>
-          </div>
-        ))}
-      </div>
+      <UserSummaryCards detail={detail} />
 
-      {(hasFrozenApps || hasFrozenCollaborations) && (
+      {access.hasPausedAccess && (
         <Alert
           type="info"
           title="Some access is paused by plan limits"
@@ -586,372 +1135,51 @@ function UserDetailPage() {
         />
       )}
 
-      <SectionCard
-        title="Identity and account"
-        description="Account identity and sign-in information. Missing values are shown as unavailable rather than inferred."
-      >
-        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div><dt className={labelClass}>User ID</dt><dd className={valueClass}>{identity.user_id}</dd></div>
-          <div><dt className={labelClass}>Name</dt><dd className={valueClass}>{unavailable(identity.name)}</dd></div>
-          <div><dt className={labelClass}>Email</dt><dd className={valueClass}>{unavailable(identity.email)}</dd></div>
-          <div><dt className={labelClass}>Created</dt><dd className={valueClass}>{formatDate(identity.created_at)}</dd></div>
-          <div><dt className={labelClass}>Authentication method</dt><dd className={valueClass}>{unavailable(identity.auth_method)}</dd></div>
-          <div>
-            <dt className={labelClass}>Email verification</dt>
-            <dd className={valueClass}>{identity.email_verified ? 'Verified' : 'Not verified'}</dd>
-          </div>
-        </dl>
-      </SectionCard>
+      <IdentitySection identity={identity} />
 
-      <SectionCard
-        title="Platform access"
-        description="This role controls platform-level administration. It is separate from the user's role in each app."
-      >
-        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div><dt className={labelClass}>Platform role</dt><dd className={valueClass}>{unavailable(identity.platform_role)}</dd></div>
-          <div>
-            <dt className={labelClass}>Effective omniadmin</dt>
-            <dd className={valueClass}>{identity.is_omniadmin ? 'Yes' : 'No'}</dd>
-          </div>
-        </dl>
-      </SectionCard>
+      <OwnedAppsSection apps={detail.owned_apps} onOpenMetrics={openAppMetrics} />
 
-      <SectionCard
-        title={`Owned apps (${detail.owned_apps.length})`}
-        description="Apps this user owns. A paused app may be unavailable because the owner's plan limit was exceeded."
-      >
-        {detail.owned_apps.length === 0 ? (
-          <p className="text-sm text-gray-600 dark:text-slate-400">This user does not own any apps.</p>
-        ) : (
-          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {detail.owned_apps.map((app) => (
-              <li key={app.app_id} className="rounded-lg border border-gray-200 p-4 dark:border-slate-700">
-                <h3 className="font-semibold text-gray-900 dark:text-slate-100">{unavailable(app.name)}</h3>
-                <dl className="mt-3 grid grid-cols-2 gap-3">
-                  <div><dt className={labelClass}>App ID</dt><dd className={valueClass}>{app.app_id}</dd></div>
-                  <div>
-                    <dt className={labelClass}>App availability</dt>
-                    <dd className={valueClass}>{app.is_frozen ? 'Paused by plan limit' : 'Available'}</dd>
-                  </div>
-                </dl>
-                {app.is_frozen && (
-                  <p className="mt-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
-                    This app is paused because the owner's plan allows fewer apps than they currently own.
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
+      <AppMembershipsSection
+        identity={identity}
+        onOpenMetrics={openAppMetrics}
+        collaborations={detail.collaborations}
+        actionsRestricted={actionsRestricted}
+        pendingAction={pendingAction}
+        adminAppsError={adminAppsError}
+        adminAppsCount={adminApps.length}
+        selectableApps={access.selectableApps}
+        allowedAppRoles={allowedAppRoles}
+        selectedAppId={selectedAppId}
+        selectedGrantRole={selectedGrantRole}
+        onSelectedAppIdChange={setSelectedAppId}
+        onSelectedAppRoleChange={setSelectedAppRole}
+        onGrantAccess={handleGrantAppAccess}
+        onSetAppRole={handleSetAppRole}
+        onRemoveAppAccess={handleRemoveAppAccess}
+      />
 
-      <SectionCard
-        title={`App memberships (${detail.collaborations.length})`}
-        description="Roles here apply only to the named app; they do not change platform access."
-      >
-        {actionsRestricted ? (
-          <p className="mb-4 text-sm text-gray-700 dark:text-slate-300" role="status">
-            App access cannot be changed for your own or a protected omniadmin account.
-          </p>
-        ) : (
-          <>
-            {identity.platform_role === 'viewer' && (
-              <Alert
-                type="warning"
-                title="Viewer platform role"
-                message="This user has the Viewer platform role, so only Viewer app access can be granted. Change their platform role to Editor or Admin first to assign Editor or Administrator app access."
-                className="mb-4"
-              />
-            )}
-            <form onSubmit={(event) => { void handleGrantAppAccess(event); }} className="mb-5 flex flex-wrap items-end gap-3 rounded-lg bg-gray-50 p-4 dark:bg-slate-900/50">
-              <label className="min-w-48 flex-1 text-sm font-medium text-gray-700 dark:text-slate-300">
-                App
-                <select
-                  value={selectedAppId}
-                  onChange={(event) => setSelectedAppId(event.target.value)}
-                  disabled={pendingAction !== null || selectableApps.length === 0}
-                  className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                >
-                  <option value="">Select an app</option>
-                  {selectableApps.map((app) => (
-                    <option key={app.app_id} value={app.app_id}>
-                      {app.name || `App ${app.app_id}`} (ID {app.app_id})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                Role
-                <select
-                  value={selectedGrantRole}
-                  onChange={(event) => {
-                    if (isAppAccessRole(event.target.value)) setSelectedAppRole(event.target.value);
-                  }}
-                  disabled={pendingAction !== null}
-                  className="mt-1 block rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                >
-                  {allowedAppRoles.map((role) => (
-                    <option key={role} value={role}>{role}</option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="submit"
-                disabled={pendingAction !== null || selectedAppId === ''}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Grant access
-              </button>
-              {adminAppsError && <p className="w-full text-sm text-red-700 dark:text-red-300" role="alert">{adminAppsError}</p>}
-              {!adminAppsError && adminApps.length === 0 && (
-                <p className="w-full text-sm text-gray-600 dark:text-slate-400">No apps are available.</p>
-              )}
-              {!adminAppsError && adminApps.length > 0 && selectableApps.length === 0 && (
-                <p className="w-full text-sm text-gray-600 dark:text-slate-400">This user already owns or has access to every app.</p>
-              )}
-            </form>
-          </>
-        )}
-        {detail.collaborations.length === 0 ? (
-          <p className="text-sm text-gray-600 dark:text-slate-400">This user has no app collaborations.</p>
-        ) : (
-          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {detail.collaborations.map((membership) => (
-              <li key={membership.collaboration_id} className="rounded-lg border border-gray-200 p-4 dark:border-slate-700">
-                <h3 className="font-semibold text-gray-900 dark:text-slate-100">{unavailable(membership.app_name)}</h3>
-                <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div><dt className={labelClass}>App ID</dt><dd className={valueClass}>{membership.app_id}</dd></div>
-                  <div><dt className={labelClass}>Collaboration role</dt><dd className={valueClass}>{membership.role}</dd></div>
-                  <div><dt className={labelClass}>Status</dt><dd className={valueClass}>{membership.status}</dd></div>
-                  <div>
-                    <dt className={labelClass}>Member access</dt>
-                    <dd className={valueClass}>{membership.is_frozen ? 'Paused by app plan limit' : 'Available'}</dd>
-                  </div>
-                  <div><dt className={labelClass}>Invited</dt><dd className={valueClass}>{formatDate(membership.invited_at)}</dd></div>
-                  <div><dt className={labelClass}>Accepted</dt><dd className={valueClass}>{formatDate(membership.accepted_at)}</dd></div>
-                </dl>
-                {membership.is_frozen && (
-                  <p className="mt-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
-                    This member's access is paused because the app has exceeded its plan's collaborator limit.
-                  </p>
-                )}
-                {!actionsRestricted && (
-                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3 dark:border-slate-700">
-                    <label className="text-sm text-gray-700 dark:text-slate-300">
-                      <span className="mr-2">Set role</span>
-                      <select
-                        aria-label={`Role for ${appLabel(membership.app_name, membership.app_id)}`}
-                        value={membership.role}
-                        onChange={(event) => {
-                          if (isAppAccessRole(event.target.value) && allowedAppRoles.includes(event.target.value)) {
-                            void handleSetAppRole(membership.app_id, event.target.value);
-                          }
-                        }}
-                        disabled={pendingAction !== null}
-                        className="ml-2 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                      >
-                        {!allowedAppRoles.some((role) => role === membership.role) && (
-                          <option value={membership.role}>{membership.role} (legacy)</option>
-                        )}
-                        {allowedAppRoles.map((role) => (
-                          <option key={role} value={role}>{role}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => { void handleRemoveAppAccess(membership.app_id, membership.app_name); }}
-                      disabled={pendingAction !== null}
-                      className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
-                    >
-                      Remove access
-                    </button>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
+      <ApiKeysSection
+        apiKeys={detail.api_keys}
+        actionsRestricted={actionsRestricted}
+        pendingAction={pendingAction}
+        onSetAPIKeyStatus={handleSetAPIKeyStatus}
+      />
 
-      <SectionCard
-        title={`API keys (${detail.api_keys.length})`}
-        description="Keys are shown as metadata only. The secret value is never returned or displayed here."
-      >
-        {detail.api_keys.length === 0 ? (
-          <p className="text-sm text-gray-600 dark:text-slate-400">This user has no API keys.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
-              <thead className="bg-gray-50 dark:bg-slate-700">
-                <tr>
-                  {['Name', 'Key ID', 'App', 'Status', 'Created', 'Last used', 'Actions'].map((heading) => (
-                    <th key={heading} scope="col" className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">{heading}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
-                {detail.api_keys.map((key) => (
-                  <tr key={key.key_id}>
-                    <td className="px-3 py-3 text-sm text-gray-900 dark:text-slate-100">{key.name}</td>
-                    <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{key.key_id}</td>
-                    <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{unavailable(key.app_name)} (ID {key.app_id})</td>
-                    <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{key.is_active ? 'Active' : 'Inactive'}</td>
-                    <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{formatDate(key.created_at)}</td>
-                    <td className="px-3 py-3 text-sm text-gray-700 dark:text-slate-300">{key.last_used_at ? formatDate(key.last_used_at) : 'Never used'}</td>
-                    <td className="px-3 py-3 text-sm">
-                      {actionsRestricted ? (
-                        <span className="text-gray-500 dark:text-slate-400">Unavailable</span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => { void handleSetAPIKeyStatus(key.key_id, key.name, !key.is_active); }}
-                          disabled={pendingAction !== null}
-                          aria-label={`${key.is_active ? 'Deactivate' : 'Reactivate'} API key ${key.name}`}
-                          className="rounded-md border border-gray-300 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
-                        >
-                          {key.is_active ? 'Deactivate' : 'Reactivate'}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </SectionCard>
-
-      <SectionCard
-        title="Usage"
-        description="This is only the system LLM-call count recorded directly for this user. It does not include app-wide, API-key, or marketplace activity."
-      >
-        <p className="text-2xl font-semibold text-gray-900 dark:text-slate-100">
-          {detail.usage?.call_count ?? 0}
-          <span className="ml-2 text-sm font-normal text-gray-600 dark:text-slate-400">system LLM calls</span>
-        </p>
-        <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
-          System LLM calls recorded for this user during the billing period starting {formatDate(detail.usage?.billing_period_start)}.
-        </p>
-      </SectionCard>
-
-      <SectionCard
-        title="Edit account"
-        description="Administrative actions are performed here so the account and its relationships can be reviewed before making changes."
-      >
-        {actionsRestricted ? (
-          <p className="text-sm text-gray-700 dark:text-slate-300" role="status">
-            {isSelf ? 'Actions are unavailable for your own account.' : 'This protected omniadmin account cannot be changed here.'}
-          </p>
-        ) : (
-          <div className="space-y-6">
-            <section className="rounded-xl bg-gray-50 p-4 dark:bg-slate-900/50" aria-labelledby="platform-role-actions">
-              <h3 id="platform-role-actions" className="font-semibold text-gray-900 dark:text-slate-100">Platform role</h3>
-              <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-slate-400">
-                Viewer: read-only access. Editor: can create and edit resources. Admin: can manage platform users and settings. These settings do not change app membership roles.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-              {(['viewer', 'editor', 'admin'] as const).map((role) => (
-                <button
-                  key={role}
-                  type="button"
-                  onClick={() => { void handleSetPlatformRole(role); }}
-                  disabled={pendingAction !== null || identity.platform_role === role}
-                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium capitalize text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
-                >
-                  <Shield className="h-4 w-4" aria-hidden="true" />
-                  {pendingAction === 'Updating role' ? 'Updating…' : `Set ${role}`}
-                </button>
-              ))}
-              </div>
-            </section>
-
-            <section className="rounded-xl bg-gray-50 p-4 dark:bg-slate-900/50" aria-labelledby="account-status-actions">
-              <h3 id="account-status-actions" className="font-semibold text-gray-900 dark:text-slate-100">Sign-in access</h3>
-              <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-slate-400">
-                Deactivating blocks the account from signing in. Reactivate it to restore sign-in access.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-              {identity.is_active ? (
-                <button
-                  type="button"
-                  onClick={() => { void handleDeactivate(); }}
-                  disabled={pendingAction !== null}
-                  className="inline-flex items-center gap-2 rounded-lg border border-amber-300 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/30"
-                >
-                  <Ban className="h-4 w-4" aria-hidden="true" />
-                  {pendingAction === 'Deactivating user' ? 'Deactivating…' : 'Deactivate'}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => { void handleActivate(); }}
-                  disabled={pendingAction !== null}
-                  className="inline-flex items-center gap-2 rounded-lg border border-green-300 px-3 py-2 text-sm font-medium text-green-800 hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-700 dark:text-green-200 dark:hover:bg-green-900/30"
-                >
-                  <UserCheck className="h-4 w-4" aria-hidden="true" />
-                  {pendingAction === 'Activating user' ? 'Activating…' : 'Activate'}
-                </button>
-              )}
-                </div>
-              </section>
-
-              {isLocalMode && identity.auth_method === 'local' && (
-                <section className="rounded-xl bg-gray-50 p-4 dark:bg-slate-900/50" aria-labelledby="password-reset-actions">
-                  <h3 id="password-reset-actions" className="font-semibold text-gray-900 dark:text-slate-100">Password assistance</h3>
-                  <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-slate-400">
-                    Generate a one-time link for this local account to set a new password. The link is shown once.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => { void handleResetLink(); }}
-                    disabled={pendingAction !== null}
-                    className="mt-3 inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
-                  >
-                    <Link2 className="h-4 w-4" aria-hidden="true" />
-                    {pendingAction === 'reset-link' ? 'Generating link…' : 'Generate reset link'}
-                  </button>
-                </section>
-              )}
-
-              {currentUser?.is_omniadmin && (
-                <section className="rounded-xl bg-gray-50 p-4 dark:bg-slate-900/50" aria-labelledby="marketplace-quota-actions">
-                  <h3 id="marketplace-quota-actions" className="font-semibold text-gray-900 dark:text-slate-100">Marketplace quota</h3>
-                  <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-slate-400">
-                    Reset only the user's marketplace invocation quota. This does not change the system LLM-call count shown above.
-                  </p>
-                <button
-                  type="button"
-                    onClick={() => { void handleResetQuota(); }}
-                  disabled={pendingAction !== null}
-                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:bg-slate-600"
-                >
-                    <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-                    {pendingAction === 'Resetting marketplace quota' ? 'Resetting quota…' : 'Reset marketplace quota'}
-                </button>
-                </section>
-              )}
-
-              <section className="rounded-xl border border-red-200 bg-red-50/70 p-4 dark:border-red-900 dark:bg-red-950/20" aria-labelledby="delete-user-action">
-                <h3 id="delete-user-action" className="font-semibold text-red-900 dark:text-red-200">Delete account</h3>
-                <p className="mt-1 text-sm leading-5 text-red-800 dark:text-red-300">
-                  Permanently remove this account. If the user owns apps, you will be asked to transfer them or confirm deleting them too.
-                </p>
-              <button
-                type="button"
-                onClick={() => { void handleDelete(); }}
-                disabled={pendingAction !== null}
-                className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:text-red-200 dark:hover:bg-red-900/30"
-              >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-                {pendingAction === 'delete' ? 'Deleting…' : 'Delete user'}
-              </button>
-              {ownedAppCount > 0 && <p className="mt-2 text-sm font-medium text-red-800 dark:text-red-300">This user currently owns {ownedAppCount} app{ownedAppCount === 1 ? '' : 's'}.</p>}
-            </section>
-            {pendingAction && <p className="text-sm text-gray-600 dark:text-slate-400">{pendingAction}…</p>}
-          </div>
-        )}
-      </SectionCard>
+      <EditAccountSection
+        identity={identity}
+        isSelf={isSelf}
+        actionsRestricted={actionsRestricted}
+        isLocalMode={isLocalMode}
+        canResetQuota={Boolean(currentUser?.is_omniadmin)}
+        ownedAppCount={ownedAppCount}
+        pendingAction={pendingAction}
+        onSetPlatformRole={handleSetPlatformRole}
+        onDeactivate={handleDeactivate}
+        onActivate={handleActivate}
+        onResetLink={handleResetLink}
+        onResetQuota={handleResetQuota}
+        onDelete={handleDelete}
+      />
 
       {resetLinkState && (
         <OneTimeLinkModal
@@ -960,6 +1188,13 @@ function UserDetailPage() {
           token={resetLinkState.token}
           expiresAt={resetLinkState.expiresAt}
           title="Password reset link"
+        />
+      )}
+      {selectedMetricsApp && (
+        <AdminAppMetricsModal
+          appId={selectedMetricsApp.app_id}
+          appName={appLabel(selectedMetricsApp.name, selectedMetricsApp.app_id)}
+          onClose={() => setSelectedMetricsApp(null)}
         />
       )}
       {deleteDialogUser && (
