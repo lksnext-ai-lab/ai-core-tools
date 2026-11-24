@@ -102,10 +102,13 @@ describe('Apps list: image', () => {
       created_at: '2026-01-01', owner_id: 1, role: 'owner', langsmith_configured: false, agent_rate_limit: 0,
       agent_count: 0, repository_count: 0, domain_count: 0, silo_count: 0, collaborator_count: 0,
     };
-    apiMock.getApps.mockResolvedValue([
-      { ...base, app_id: 1, name: 'With Image', image_updated_at: VERSION },
-      { ...base, app_id: 2, name: 'Plain Workspace', image_updated_at: null },
-    ] as never);
+    apiMock.getAppsPage.mockResolvedValue({
+      apps: [
+        { ...base, app_id: 1, name: 'With Image', image_updated_at: VERSION },
+        { ...base, app_id: 2, name: 'Plain Workspace', image_updated_at: null },
+      ],
+      hasMore: false,
+    } as never);
     apiMock.getAppImage.mockResolvedValue(new Blob(['img']) as never);
     const { container } = renderWithProviders(<AppsPage />);
     await screen.findByText('With Image');

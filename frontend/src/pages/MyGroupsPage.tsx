@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Users } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { apiService, type MyGroup, type MyGroupApp } from '../services/api';
 import Alert from '../components/ui/Alert';
+import ButtonApp from '../components/ui/ButtonApp';
+import CardApp from '../components/ui/CardApp';
+import LoadingState from '../components/ui/LoadingState';
+import Title from '../components/ui/Title';
 
 const PAGE_SIZE = 50;
 
@@ -98,47 +102,52 @@ function MyGroupsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
-      <header>
-        <h1 className="flex items-center gap-2 text-2xl font-semibold text-gray-900 dark:text-white">
-          <Users aria-hidden="true" className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
-          My Groups
-        </h1>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          View groups provisioned to your account and the app access each group contributes. This page is read-only.
-        </p>
-      </header>
+    <div className="space-y-6">
+      <Title
+        variant="titSecundario"
+        titulo="My Groups"
+        subtitulo="View groups provisioned to your account and the app access each group contributes. This page is read-only."
+      />
 
       {groupError && (
         <Alert type="error" title="Groups could not be loaded" message={(
-          <div>
+          <div className="space-y-2">
             <p>{groupError}</p>
-            <button type="button" onClick={() => void loadGroups(0, false)}
-              className="mt-2 rounded underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
-              Retry loading groups
-            </button>
+            <ButtonApp
+              label="Retry loading groups"
+              variant="muted"
+              size="small"
+              onClick={() => void loadGroups(0, false)}
+            />
           </div>
         )} />
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(16rem,1fr)_2fr]">
-        <section aria-labelledby="my-groups-heading" className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-          <h2 id="my-groups-heading" className="text-lg font-semibold text-gray-900 dark:text-white">Your groups</h2>
+      <div className="grid gap-5 lg:grid-cols-[minmax(16rem,1fr)_2fr]">
+        <CardApp className="min-w-0">
+          <div className="mb-4">
+            <h2 className="font-display text-[17px] font-medium leading-8 text-fg dark:text-fg-dark">Your groups</h2>
+            <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+              Select a group to review the app access it contributes.
+            </p>
+          </div>
           {groupLoading ? (
-            <p className="mt-4" role="status" aria-live="polite">Loading your groups…</p>
+            <LoadingState message="Loading your groups…" variant="section" />
           ) : groups.length === 0 && !groupError ? (
-            <p className="mt-4 text-sm text-gray-600 dark:text-gray-300">You do not currently have any eligible groups.</p>
+            <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">You do not currently have any eligible groups.</p>
           ) : (
-            <ul className="mt-3 divide-y divide-gray-200 dark:divide-gray-700">
+            <ul className="divide-y divide-line dark:divide-line-dark">
               {groups.map((group) => (
-                <li key={group.group_id} className="py-2">
+                <li key={group.group_id} className="py-2 first:pt-0 last:pb-0">
                   <button type="button" onClick={() => void loadGroupApps(group, 0, false)}
-                    aria-current={selectedGroup?.group_id === group.group_id ? 'true' : undefined}
-                    className={`w-full rounded-md p-3 text-left hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 dark:hover:bg-gray-700 ${
-                      selectedGroup?.group_id === group.group_id ? 'bg-indigo-50 dark:bg-indigo-950' : ''
+                    aria-pressed={selectedGroup?.group_id === group.group_id}
+                    className={`w-full rounded-md border px-3 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink dark:focus-visible:outline-ink-dark ${
+                      selectedGroup?.group_id === group.group_id
+                        ? 'border-bg-soft bg-surface-hover dark:border-bronze-border-dark dark:bg-surface-hover-dark'
+                        : 'border-transparent hover:bg-surface-hover dark:hover:bg-surface-hover-dark'
                     }`}>
-                    <span className="block font-medium text-gray-900 dark:text-white">{group.display_name}</span>
-                    <span className="mt-1 block break-all text-xs text-gray-600 dark:text-gray-300">
+                    <span className="block font-display font-medium text-fg dark:text-fg-dark">{group.display_name}</span>
+                    <span className="mt-1 block break-all text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
                       Group ID: {group.group_id}
                     </span>
                   </button>
@@ -147,77 +156,96 @@ function MyGroupsPage() {
             </ul>
           )}
           {groupHasMore && (
-            <button type="button" disabled={groupLoading || groupsLoadingMore} onClick={() => void loadGroups(groupOffset, true)}
-              className="mt-3 rounded px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 disabled:opacity-60 dark:text-indigo-300 dark:hover:bg-gray-700">
-              {groupsLoadingMore ? 'Loading…' : 'Load more groups'}
-            </button>
+            <ButtonApp
+              label="Load more groups"
+              variant="muted"
+              size="small"
+              className="mt-3"
+              disabled={groupLoading}
+              loading={groupsLoadingMore}
+              onClick={() => void loadGroups(groupOffset, true)}
+            />
           )}
-          {groupsLoadingMore && <span className="sr-only" role="status">Loading more groups</span>}
-        </section>
+          {groupsLoadingMore && <output className="sr-only" aria-live="polite">Loading more groups</output>}
+        </CardApp>
 
-        <section aria-labelledby="group-apps-heading" className="min-w-0 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-          <h2 id="group-apps-heading" className="text-lg font-semibold text-gray-900 dark:text-white">
-            {selectedGroup ? `Apps for ${selectedGroup.display_name}` : 'Group app access'}
-          </h2>
+        <CardApp className="min-w-0">
+          <div className="mb-4">
+            <h2 className="font-display text-[17px] font-medium leading-8 text-fg dark:text-fg-dark">
+              {selectedGroup ? `Apps for ${selectedGroup.display_name}` : 'Group app access'}
+            </h2>
+            <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+              Review each group's contribution and your effective app role.
+            </p>
+          </div>
           {appsError && (
-            <div className="mt-4">
+            <div className="mb-4 space-y-2">
               <Alert type="error" title="Group apps could not be loaded" message={appsError} />
               {selectedGroup && (
-                <button type="button" onClick={() => void loadGroupApps(selectedGroup, 0, false)}
-                  className="mt-2 rounded px-3 py-2 text-sm underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600">
-                  Retry loading apps
-                </button>
+                <ButtonApp
+                  label="Retry loading apps"
+                  variant="muted"
+                  size="small"
+                  onClick={() => void loadGroupApps(selectedGroup, 0, false)}
+                />
               )}
             </div>
           )}
           {!selectedGroup ? (
-            <p className="mt-4 text-sm text-gray-600 dark:text-gray-300">Select a group to view its app access.</p>
+            <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">Select a group to view its app access.</p>
           ) : appsLoading ? (
-            <p className="mt-4" role="status" aria-live="polite">Loading apps for this group…</p>
+            <LoadingState message="Loading apps for this group…" variant="section" />
           ) : groupApps.length === 0 && !appsError ? (
-            <p className="mt-4 text-sm text-gray-600 dark:text-gray-300">This group has no active app access policies.</p>
+            <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">This group has no active app access policies.</p>
           ) : (
-            <div className="mt-4 space-y-3">
+            <div className="space-y-3">
               {groupApps.map((item) => {
                 const differs = contributionDiffers(item.contribution, item.effective_role);
                 return (
                   <Link
                     key={item.app_id}
                     to={`/apps/${item.app_id}`}
-                    className="block rounded-md border border-gray-200 p-4 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-gray-700 dark:hover:bg-gray-700"
+                    className="block rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink dark:focus-visible:outline-ink-dark"
                   >
-                    <h3 className="font-medium text-gray-900 dark:text-white">
-                      {item.app_name || `App ${item.app_id}`}
-                    </h3>
-                    <p className="mt-1 break-all text-sm text-gray-600 dark:text-gray-300">App ID: {item.app_id}</p>
-                    <p className="mt-2 text-sm text-gray-700 dark:text-gray-200">
-                      This group contributes: <span className="font-semibold">{item.contribution}</span>
-                    </p>
-                    {differs && item.effective_role && (
-                      <p className="mt-1 text-sm text-gray-700 dark:text-gray-200">
-                        Your effective app role: <span className="font-semibold">{item.effective_role.toUpperCase()}</span>
+                    <CardApp variant="canvas" className="gap-1 transition-colors hover:bg-surface-hover dark:hover:bg-surface-hover-dark">
+                      <h3 className="font-display text-base font-medium text-fg dark:text-fg-dark">
+                        {item.app_name || `App ${item.app_id}`}
+                      </h3>
+                      <p className="break-all text-xs text-fg-tertiary dark:text-fg-tertiary-dark">App ID: {item.app_id}</p>
+                      <p className="mt-2 text-sm text-fg-secondary dark:text-fg-secondary-dark">
+                        This group contributes: <span className="font-semibold text-fg dark:text-fg-dark">{item.contribution}</span>
                       </p>
-                    )}
+                      {differs && item.effective_role && (
+                        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+                          Your effective app role: <span className="font-semibold text-fg dark:text-fg-dark">{item.effective_role.toUpperCase()}</span>
+                        </p>
+                      )}
+                    </CardApp>
                   </Link>
                 );
               })}
             </div>
           )}
           {appsHaveMore && (
-            <button type="button" disabled={appsLoading || appsLoadingMore} onClick={() => selectedGroup && void loadGroupApps(selectedGroup, appsOffset, true)}
-              className="mt-4 rounded px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 disabled:opacity-60 dark:text-indigo-300 dark:hover:bg-gray-700">
-              {appsLoadingMore ? 'Loading…' : 'Load more apps'}
-            </button>
+            <ButtonApp
+              label="Load more apps"
+              variant="muted"
+              size="small"
+              className="mt-4"
+              disabled={appsLoading}
+              loading={appsLoadingMore}
+              onClick={() => selectedGroup && void loadGroupApps(selectedGroup, appsOffset, true)}
+            />
           )}
-          {appsLoadingMore && <span className="sr-only" role="status">Loading more apps</span>}
-        </section>
+          {appsLoadingMore && <output className="sr-only" aria-live="polite">Loading more apps</output>}
+        </CardApp>
       </div>
-      <div className="sr-only" role="status" aria-live="polite">
+      <output className="sr-only" aria-live="polite">
         {groupLoading ? 'Loading groups' : `${groups.length} of ${groupTotal} groups loaded`}
-      </div>
-      <div className="sr-only" role="status" aria-live="polite">
+      </output>
+      <output className="sr-only" aria-live="polite">
         {appsLiveMessage}
-      </div>
+      </output>
       <AlertIconHint />
     </div>
   );
@@ -225,8 +253,8 @@ function MyGroupsPage() {
 
 function AlertIconHint() {
   return (
-    <p className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
-      <AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0" />
+    <p className="flex items-start gap-2 rounded-md bg-canvas-alt px-4 py-3 text-xs text-fg-secondary dark:bg-canvas-alt-dark dark:text-fg-secondary-dark">
+      <AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0 text-fg-tertiary dark:text-fg-tertiary-dark" />
       Group access shown here is informational and does not change your app role or account permissions.
     </p>
   );

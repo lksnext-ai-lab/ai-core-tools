@@ -82,7 +82,7 @@ async def list_collaborators(
     """
     List all collaborators for a specific app.
     """
-    user_id = auth_context.identity.id
+    user_id = int(auth_context.identity.id)
 
     try:
         _, collaboration_service = get_services(db)
@@ -136,7 +136,7 @@ async def invite_collaborator(
     """
     Invite a user to collaborate on an app.
     """
-    user_id = auth_context.identity.id
+    user_id = int(auth_context.identity.id)
     
     try:
         _, collaboration_service = get_services(db)
@@ -202,7 +202,7 @@ async def update_collaborator_role(
     """
     Update a collaborator's role.
     """
-    current_user_id = auth_context.identity.id
+    current_user_id = int(auth_context.identity.id)
     
     try:
         _, collaboration_service = get_services(db)
@@ -253,7 +253,7 @@ async def remove_collaborator(
     """
     Remove a collaborator from an app.
     """
-    current_user_id = auth_context.identity.id
+    current_user_id = int(auth_context.identity.id)
     
     try:
         _, collaboration_service = get_services(db)
@@ -300,7 +300,7 @@ async def respond_to_invitation(
     """
     Accept or decline a collaboration invitation.
     """
-    user_id = auth_context.identity.id
+    user_id = int(auth_context.identity.id)
     
     try:
         _, collaboration_service = get_services(db)
@@ -343,7 +343,7 @@ async def get_my_invitations(
     """
     Get all pending collaboration invitations for the current user.
     """
-    user_id = auth_context.identity.id
+    user_id = int(auth_context.identity.id)
     
     try:
         _, collaboration_service = get_services(db)

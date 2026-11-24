@@ -210,6 +210,7 @@ function loadApi(fetchImpl) {
       '../core/ConfigService': { configService: { getApiBaseUrl: () => 'http://api' } },
       './auth': { authService: { getOIDCToken: () => null } },
       './cookies': { getCsrfToken: () => 'csrf' },
+      '../constants/appList': { MAX_APP_LIST_PAGE_SIZE: 100 },
     },
     { fetch: fetchImpl, FormData, TextDecoder, console, URLSearchParams, encodeURIComponent },
   );

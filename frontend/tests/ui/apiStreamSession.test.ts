@@ -6,7 +6,9 @@ type ActualApi = typeof import('../../src/services/api');
 
 async function realApi() {
   // The shared setup replaces `apiService` with an in-memory mock; these tests need the real one.
-  return (await vi.importActual<ActualApi>('../../src/services/api')).apiService;
+  const actual = await vi.importActual<ActualApi>('../../src/services/api');
+  actual.setApiAuthMode('local');
+  return actual.apiService;
 }
 
 function sseResponse(body: string): Response {

@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -56,9 +56,9 @@ describe('Chat menu entry', () => {
     expect(link).toHaveAttribute('href', '/apps/7/chat');
     // Proves the Sidebar's role filter is active for this user (mocked `useUser` with platform_role 'viewer', not
     // an App role): an editor-only entry is hidden while the Chat entry, which has no role flag, is shown.
-    expect(screen.queryByRole('link', { name: tr('breadcrumbs.navigation.myApps') })).not.toBeInTheDocument();
-    // And the App panel (not just the global rail) is what is showing.
-    expect(screen.getByRole('link', { name: tr('breadcrumbs.navigation.agents') })).toBeInTheDocument();
+    const appNavigation = screen.getByRole('link', { name: tr('breadcrumbs.navigation.agents') }).closest('ul');
+    expect(appNavigation).not.toBeNull();
+    expect(within(appNavigation!).queryByRole('link', { name: tr('breadcrumbs.navigation.myApps') })).not.toBeInTheDocument();
   });
 });
 

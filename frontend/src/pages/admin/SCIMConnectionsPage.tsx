@@ -8,12 +8,15 @@ import {
   type SCIMConnection,
   type SCIMConnectionCredential,
 } from '../../services/api';
+import Alert from '../../components/ui/Alert';
+import ButtonApp from '../../components/ui/ButtonApp';
+import CardApp from '../../components/ui/CardApp';
+import LoadingState from '../../components/ui/LoadingState';
+import Title from '../../components/ui/Title';
 
 const fieldClassName =
-  'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
-const labelClassName = 'mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200';
-const managementButtonFocusClassName =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900';
+  'w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg shadow-sm focus:border-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-surface dark:border-line-dark dark:bg-surface-dark dark:text-fg-dark dark:focus-visible:ring-focus-dark dark:focus-visible:ring-offset-surface-dark';
+const labelClassName = 'mb-1 block text-sm font-medium text-fg-secondary dark:text-fg-secondary-dark';
 
 const isKeycloakConnection = (item: SCIMConnection) =>
   item.provider_type.toLowerCase() === 'keycloak';
@@ -47,6 +50,7 @@ type SCIMProvider = 'keycloak' | 'entra';
 function SCIMConnectionsPage() {
   const [setupEnabled, setSetupEnabled] = useState<boolean | null>(null);
   const [connections, setConnections] = useState<SCIMConnection[]>([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
   const [editingConnection, setEditingConnection] = useState<SCIMConnection | null>(null);
   const [editDisplayName, setEditDisplayName] = useState('');
   const [editDirectoryId, setEditDirectoryId] = useState('');
@@ -97,6 +101,9 @@ function SCIMConnectionsPage() {
         if (active) {
           setError(cause instanceof Error ? cause.message : 'Could not load SCIM settings.');
         }
+      })
+      .finally(() => {
+        if (active) setConnectionsLoading(false);
       });
     return () => {
       active = false;
@@ -308,8 +315,8 @@ function SCIMConnectionsPage() {
   };
 
   const renderReconciliationSummary = (response: KeycloakReconciliationResponse) => (
-    <div className="mt-4 rounded-md border border-gray-300 p-4 text-sm dark:border-gray-700">
-      <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+    <CardApp className="mt-4 text-sm">
+      <h3 className="mb-4 font-display text-[17px] font-medium leading-8 text-fg dark:text-fg-dark">
         {response.dry_run ? 'Dry-run results' : 'Reconciliation results'}
       </h3>
       <p className="mt-1">
@@ -325,7 +332,7 @@ function SCIMConnectionsPage() {
         <div><dt className="inline font-medium">Unmanaged remote users: </dt><dd className="inline">{response.summary.unmanaged_remote_users}</dd></div>
       </dl>
       {response.summary.message && <p className="mt-2">{response.summary.message}</p>}
-    </div>
+    </CardApp>
   );
 
   const renderCreatedConnection = () => {
@@ -361,24 +368,23 @@ function SCIMConnectionsPage() {
                 readOnly
                 value={apiService.getSCIMBaseUrl(connection.connection_key)}
               />
-              <button
-                type="button"
+              <ButtonApp
+                label={copiedField === 'url' ? 'URL copied' : 'Copy URL'}
                 onClick={() => void handleCopy(
                   apiService.getSCIMBaseUrl(connection.connection_key),
                   'url',
                 )}
-                className={`mt-2 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800 ${managementButtonFocusClassName}`}
-              >
-                {copiedField === 'url' ? 'URL copied' : 'Copy URL'}
-              </button>
+                variant="muted"
+                size="small"
+                className="mt-2"
+              />
             </div>
-            <button
-              type="button"
+            <ButtonApp
+              label={copiedField === 'token' ? 'Token copied' : 'Copy token'}
               onClick={() => void handleCopy(connection.bearer_token, 'token')}
-              className={`rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800 ${managementButtonFocusClassName}`}
-            >
-              {copiedField === 'token' ? 'Token copied' : 'Copy token'}
-            </button>
+              variant="muted"
+              size="small"
+            />
             <div className="space-y-2 text-sm text-green-950 dark:text-green-100">
               <h3 className="font-semibold">Configure provisioning in Microsoft Entra</h3>
               <ol className="list-decimal space-y-1 pl-5">
@@ -471,19 +477,18 @@ function SCIMConnectionsPage() {
               disabled={busy}
             />
           </div>
-          <button
-            type="button"
-            onClick={handleRealReconciliation}
+          <ButtonApp
+            label={busy ? 'Running reconciliation…' : 'Confirm and run real reconciliation'}
+            onClick={() => void handleRealReconciliation()}
             disabled={
               busy
               || !reconcilePreview.preview_token
               || !confirmRealReconcile
               || !reconcileAdminPassword
             }
-            className="rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {busy ? 'Running reconciliation…' : 'Confirm and run real reconciliation'}
-          </button>
+            variant="dangerSolid"
+            loading={busy}
+          />
         </div>
       )}
       {reconcileResult && renderReconciliationSummary(reconcileResult)}
@@ -493,15 +498,16 @@ function SCIMConnectionsPage() {
   const reconciliationStatus = reconcilePreview ?? reconcileResult;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-          SCIM connections
-        </h1>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-          Create a provider-specific Mattin SCIM connection. Keycloak has a local setup wizard; Entra provides guided configuration.
-        </p>
-      </header>
+    <div className="space-y-6">
+      <Title
+        variant="titSecundario"
+        titulo="SCIM connections"
+        subtitulo="Create a provider-specific Mattin SCIM connection. Keycloak has a local setup wizard; Entra provides guided configuration."
+      />
+
+      <output className="sr-only" aria-live="polite" aria-atomic="true">
+        {connection ? `Connection created: ${connection.display_name}` : ''}
+      </output>
 
       {providerType === 'keycloak' && (
       <section
@@ -518,24 +524,27 @@ function SCIMConnectionsPage() {
       )}
 
       {providerType === 'keycloak' && setupEnabled === false && (
-        <output className="block rounded-md border border-gray-300 p-4 text-sm dark:border-gray-700">
+        <output className="block rounded-md border border-line p-4 text-sm text-fg-secondary dark:border-line-dark dark:text-fg-secondary-dark">
           Auto-setup is disabled. The operator must set{' '}
           <code className="font-mono">SCIM_KEYCLOAK_LOCAL_AUTOCONNECT_ENABLED=true</code> and restart the backend.
         </output>
       )}
 
       {error && (
-        <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200">
-          {error}
-        </div>
+        <Alert type="error" message={error} />
       )}
 
-      <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">1. Create a Mattin connection</h2>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-          Mattin generates the connection URL and bearer token. The token is shown only once.
-        </p>
-        <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={handleCreateConnection}>
+      <section aria-label="Create a Mattin connection">
+        <CardApp className="min-w-0">
+        <div className="mb-4">
+          <h2 className="font-display text-[17px] font-medium leading-8 text-fg dark:text-fg-dark">
+            1. Create a Mattin connection
+          </h2>
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+            Mattin generates the connection URL and bearer token. The token is shown only once.
+          </p>
+        </div>
+        <form className="grid gap-4 sm:grid-cols-2" onSubmit={handleCreateConnection}>
           <div>
             <label htmlFor="scim-provider" className={labelClassName}>Provider</label>
             <select
@@ -582,23 +591,26 @@ function SCIMConnectionsPage() {
             />
           </div>
           <div className="sm:col-span-2">
-            <button
+            <ButtonApp
+              label="Create SCIM connection"
               type="submit"
               disabled={busy || (providerType === 'keycloak' && setupEnabled !== true) || Boolean(connection)}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Create SCIM connection
-            </button>
+              loading={busy}
+            />
           </div>
         </form>
 
         {renderCreatedConnection()}
+        </CardApp>
       </section>
 
       {connection && providerType === 'keycloak' && (
-        <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">2. Configure and test Keycloak</h2>
-          <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={handleConfigureTarget}>
+        <section aria-label="Configure and test Keycloak">
+          <CardApp className="min-w-0">
+          <h2 className="mb-4 font-display text-[17px] font-medium leading-8 text-fg dark:text-fg-dark">
+            2. Configure and test Keycloak
+          </h2>
+          <form className="grid gap-4 sm:grid-cols-2" onSubmit={handleConfigureTarget}>
             <div>
               <label htmlFor="mattin-base-url" className={labelClassName}>Mattin SCIM base URL, reachable from Keycloak</label>
               <input
@@ -665,7 +677,7 @@ function SCIMConnectionsPage() {
                 maxLength={255}
               />
             </div>
-            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 sm:col-span-2">
+            <label className="flex items-center gap-2 text-sm text-fg-secondary dark:text-fg-secondary-dark sm:col-span-2">
               <input
                 type="checkbox"
                 checked={syncGroups}
@@ -674,26 +686,31 @@ function SCIMConnectionsPage() {
               <span>Synchronize groups</span>
             </label>
             <div className="sm:col-span-2">
-              <button
+              <ButtonApp
+                label={busy ? 'Configuring…' : 'Create target and test connection'}
                 type="submit"
                 disabled={busy}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {busy ? 'Configuring…' : 'Create target and test connection'}
-              </button>
+                loading={busy}
+              />
             </div>
           </form>
+          </CardApp>
         </section>
       )}
 
       {renderKeycloakResult()}
 
-      <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">3. Preview and run reconciliation</h2>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-          Reconciliation can create, update, or deactivate users in Mattin. Review the dry-run before confirming a real run.
-        </p>
-        <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={handleReconciliationDryRun}>
+      <section aria-label="Preview and run reconciliation">
+        <CardApp className="min-w-0">
+        <div className="mb-4">
+          <h2 className="font-display text-[17px] font-medium leading-8 text-fg dark:text-fg-dark">
+            3. Preview and run reconciliation
+          </h2>
+          <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+            Reconciliation can create, update, or deactivate users in Mattin. Review the dry-run before confirming a real run.
+          </p>
+        </div>
+        <form className="grid gap-4 sm:grid-cols-2" onSubmit={handleReconciliationDryRun}>
           <div className="sm:col-span-2">
             <label htmlFor="scim-reconcile-connection" className={labelClassName}>SCIM connection / Keycloak realm</label>
             <select
@@ -768,58 +785,61 @@ function SCIMConnectionsPage() {
             />
           </div>
           <div className="sm:col-span-2">
-            <button
+            <ButtonApp
+              label={busy ? 'Running dry-run…' : 'Run dry-run'}
               type="submit"
               disabled={busy || !reconcileConnectionId || setupEnabled !== true}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {busy ? 'Running dry-run…' : 'Run dry-run'}
-            </button>
+              loading={busy}
+            />
           </div>
         </form>
 
         {renderReconciliationResults()}
+        </CardApp>
       </section>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Existing SCIM connections</h2>
-        {connections.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">No connections found.</p>
-        ) : (
-          <ul className="mt-3 divide-y divide-gray-200 dark:divide-gray-700">
+      <section aria-label="Existing SCIM connections">
+        <CardApp className="min-w-0">
+        <h2 className="mb-4 font-display text-[17px] font-medium leading-8 text-fg dark:text-fg-dark">
+          Existing SCIM connections
+        </h2>
+        {connectionsLoading && <LoadingState variant="inline" />}
+        {!connectionsLoading && connections.length === 0 && !error && (
+          <p className="mt-2 text-sm text-fg-secondary dark:text-fg-secondary-dark">No connections found.</p>
+        )}
+        {!connectionsLoading && connections.length > 0 && (
+          <ul className="mt-3 divide-y divide-line dark:divide-line-dark">
             {connections.map((item) => (
               <li key={item.id} className="py-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <span className="font-medium text-gray-900 dark:text-gray-100">{item.display_name}</span>
-                    <span className="ml-2 text-gray-600 dark:text-gray-300">
+                    <span className="font-display font-medium text-fg dark:text-fg-dark">{item.display_name}</span>
+                    <span className="ml-2 text-fg-secondary dark:text-fg-secondary-dark">
                       {getDirectoryLabel(item)}: {item.external_directory_id ?? '—'} · {item.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                   <div className="flex gap-2">
-                    <button
-                      type="button"
+                    <ButtonApp
+                      label="Edit"
                       onClick={() => handleStartEditing(item)}
                       disabled={busy}
                       aria-label={`Edit ${item.display_name}`}
-                      className={`rounded-md border border-gray-300 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800 ${managementButtonFocusClassName}`}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
+                      variant="muted"
+                      size="small"
+                    />
+                    <ButtonApp
+                      label={item.is_active ? 'Deactivate' : 'Activate'}
                       onClick={() => void handleSetConnectionActive(item)}
                       disabled={busy}
                       aria-label={`${item.is_active ? 'Deactivate' : 'Activate'} ${item.display_name}`}
-                      className={`rounded-md border border-gray-300 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800 ${managementButtonFocusClassName}`}
-                    >
-                      {item.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
+                      variant="muted"
+                      size="small"
+                    />
                   </div>
                 </div>
                 {editingConnection?.id === item.id && (
                   <form
-                    className="mt-4 grid gap-4 rounded-md border border-gray-200 p-4 dark:border-gray-700 sm:grid-cols-2"
+                    className="mt-4 grid gap-4 rounded-md border border-line p-4 dark:border-line-dark sm:grid-cols-2"
                     onSubmit={handleUpdateConnection}
                   >
                     <div>
@@ -913,7 +933,8 @@ function SCIMConnectionsPage() {
                       </div>
                     )}
                     <div className="flex gap-2 sm:col-span-2">
-                      <button
+                      <ButtonApp
+                        label={busy ? 'Saving…' : 'Save changes'}
                         type="submit"
                         disabled={
                           busy
@@ -921,18 +942,14 @@ function SCIMConnectionsPage() {
                             && editDirectoryId.trim() !== (item.external_directory_id ?? '')
                             && setupEnabled !== true)
                         }
-                        className={`rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 ${managementButtonFocusClassName}`}
-                      >
-                        {busy ? 'Saving…' : 'Save changes'}
-                      </button>
-                      <button
-                        type="button"
+                        loading={busy}
+                      />
+                      <ButtonApp
+                        label="Cancel"
                         onClick={handleCancelEditing}
                         disabled={busy}
-                        className={`rounded-md border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800 ${managementButtonFocusClassName}`}
-                      >
-                        Cancel
-                      </button>
+                        variant="muted"
+                      />
                     </div>
                   </form>
                 )}
@@ -940,6 +957,7 @@ function SCIMConnectionsPage() {
             ))}
           </ul>
         )}
+        </CardApp>
       </section>
     </div>
   );
