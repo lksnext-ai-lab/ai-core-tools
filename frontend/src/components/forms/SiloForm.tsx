@@ -10,6 +10,14 @@ import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } 
 import { MediaServicesFields, type MediaAIServiceOption } from './MediaServicesFields';
 import { FormField, FormSelect } from '../ui/FormField';
 import CardApp from '../ui/CardApp';
+import { IndexingSettingsFields } from './IndexingSettingsFields';
+import type { IndexingDetailFields, IndexingSettings, IndexingSettingsPayload } from '../../types/indexing';
+import {
+  hasIndexingErrors,
+  indexingSettingsErrors,
+  initialIndexingSettings,
+  toIndexingPayload,
+} from '../../utils/indexingSettings';
 
 interface VectorDbOption {
   code: string;
@@ -17,7 +25,7 @@ interface VectorDbOption {
 }
 
 // Define the Silo type for form data
-interface Silo {
+interface Silo extends IndexingDetailFields {
   silo_id: number;
   name: string;
   description?: string;
@@ -36,7 +44,7 @@ interface Silo {
 }
 
 // Define the form data type
-interface SiloFormData {
+interface SiloFormData extends IndexingSettingsPayload {
   name: string;
   description?: string;
   type?: string;
@@ -71,6 +79,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
   const [outputParsers, setOutputParsers] = useState<any[]>([]);
   const [embeddingServices, setEmbeddingServices] = useState<(ServiceOptionLike & { provider?: string; is_system?: boolean })[]>([]);
   const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
+  const [indexing, setIndexing] = useState<IndexingSettings | null>(null);
   
   const isEditing = !!silo && silo.silo_id !== 0;
   let submitButtonLabel = isEditing ? t('siloFormPage.actions.update') : t('siloFormPage.actions.create');
@@ -96,6 +105,7 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
       || 'PGVECTOR';
 
     setVectorDbOptions(availableVectorDbOptions);
+    setIndexing(initialIndexingSettings(silo));
 
     setFormData(prev => ({
       ...prev,
@@ -179,13 +189,21 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
       return;
     }
 
+    const indexingOptions = silo?.indexing_options;
+    if (indexing && indexingOptions && hasIndexingErrors(indexingSettingsErrors(indexing, indexingOptions))) {
+      setError(t('siloFormPage.indexing.validation.invalid'));
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setError(null);
+      const indexingPayload = indexing ? toIndexingPayload(indexing) : {};
       const payload = isEditing
-        ? (({ vector_db_type: _vdb, embedding_service_id: _esi, ...rest }) => rest)(formData)
+        // type is omitted on update so the backend keeps it (DOMAIN, SHAREPOINT and REPO silos are edited here too)
+        ? (({ vector_db_type: _vdb, embedding_service_id: _esi, type: _type, ...rest }) => rest)(formData)
         : { ...formData, vector_db_type: formData.vector_db_type!.toUpperCase() };
-      await onSubmit(payload);
+      await onSubmit({ ...payload, ...indexingPayload });
     } catch (err) {
       setError(err instanceof Error ? err.message : t('siloFormPage.saveFailed'));
     } finally {
@@ -319,6 +337,20 @@ function SiloForm({ silo, onSubmit, onCancel}: Readonly<SiloFormProps>) {
                 savedVideoServiceId={silo?.video_ai_service_id}
                 disabled={isSubmitting}
                 onChange={(field, value) => setFormData(prev => ({ ...prev, [field]: value }))}
+              />
+            </CardApp>
+          )}
+
+          {/* Chunking and PDF loader */}
+          {indexing && silo?.indexing_options && (
+            <CardApp className="space-y-4 pt-6 mt-5" titulo={t('siloFormPage.indexing.title')}>
+              <IndexingSettingsFields
+                scope="silo"
+                options={silo.indexing_options}
+                value={indexing}
+                onChange={setIndexing}
+                isEditing={isEditing}
+                disabled={isSubmitting}
               />
             </CardApp>
           )}

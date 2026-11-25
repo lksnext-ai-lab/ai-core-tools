@@ -3364,6 +3364,41 @@
       "noVideoAnalysis": "Bat ere ez (analisi bisualik ez)",
       "videoAnalysisHelp": "Aukerakoa. Bideoan ikusten denaren deskribapena gehitzen dio transkribatutako zati bakoitzari."
     },
+    "indexing": {
+      "title": "Indexazioa",
+      "chunkSize": "Zatiaren tamaina (karaktereak)",
+      "chunkSizeHelp": "Indexatutako zati bakoitzaren gehieneko luzera, {{min}} eta {{max}} artean. Zati handiek testuinguru gehiago ematen dute emaitza bakoitzeko; 512 tokenera mugatutako embedding ereduekin, ez gainditu 2000 inguru.",
+      "chunkOverlap": "Zatien arteko gainjartzea (karaktereak)",
+      "chunkOverlapHelp": "Ondoz ondoko zatien artean errepikatzen den testua, ideia bat erdibitu ez dadin. Gehienez, zatiaren tamainaren erdia.",
+      "pdfLoader": "PDF loader-a",
+      "pdfLoaders": {
+        "pymupdf": {
+          "label": "Azkarra (PyMuPDF)",
+          "description": "Orri bakoitzeko testu laua, 0,01 s inguru orriko. Zatiek ez dituzte orriak gurutzatzen eta ez dute atalari buruzko informaziorik."
+        },
+        "pymupdf4llm": {
+          "label": "Egituratua (pymupdf4llm)",
+          "description": "Izenburuak, taulak eta zutabe anitzeko orrien irakurketa-ordena gordetzen ditu, eta zati bakoitza bere atalarekin etiketatzen du. 0,5 s inguru orriko."
+        }
+      },
+      "loaderOptions": {
+        "section_prefix": {
+          "label": "Gehitu atala zati bakoitzari",
+          "help": "Zati bakoitza bere atalen bidearekin hasten da, adibidez [1 Plana > 1.2 Faseak], bilaketak izenburua ere kontuan har dezan."
+        },
+        "remove_headers_footers": {
+          "label": "Kendu orriburuak eta orri-oinak",
+          "help": "Orri guztien goialdean eta behealdean errepikatzen den testua kentzen du."
+        }
+      },
+      "appliesToNewContentRepository": "Aldaketak hemendik aurrera igotzen edo berriro indexatzen diren dokumentuei aplikatzen zaizkie. Dagoeneko indexatuta daudenek beren zatiak gordetzen dituzte berriro indexatu arte.",
+      "appliesToNewContentSilo": "Aldaketak hemendik aurrera indexatzen den edukiari aplikatzen zaizkio. Dagoeneko indexatuta dagoen edukiak bere zatiak gordetzen ditu berriro indexatu arte.",
+      "validation": {
+        "chunkSizeRange": "Idatzi {{min}} eta {{max}} arteko zenbaki oso bat.",
+        "chunkOverlapRange": "Idatzi 0 eta {{max}} arteko zenbaki oso bat.",
+        "invalid": "Berrikusi indexazio-ezarpenak."
+      }
+    },
     "about": {
       "title": "Silo pertsonalizatuei buruz",
       "description": "Silo pertsonalizatuak bektore-biltegiratzeko edukiontziak dira, bilaketa semantikoa eta berreskurapena ahalbidetzen dutenak. Dokumentuen embedding-ak gordetzen dituzte eta AA agenteei informazio garrantzitsua azkar aurkitzeko aukera ematen diete.",

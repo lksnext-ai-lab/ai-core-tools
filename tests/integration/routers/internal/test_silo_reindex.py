@@ -103,7 +103,7 @@ def _reindex_url(app_id: int, silo_id: int, resource_id: int) -> str:
     )
 
 
-def _fake_extract(path, file_extension, base_metadata):
+def _fake_extract(path, file_extension, base_metadata, indexing=None):
     """Stand-in for extract_documents_from_file: stamps each chunk with base_metadata
     (which includes the index_batch set by index_resource), as the real splitter does."""
     return [

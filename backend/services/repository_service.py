@@ -71,6 +71,7 @@ class RepositoryService:
         db: Session = None,
         transcription_service_id: Optional[int] = None,
         video_ai_service_id: Optional[int] = None,
+        indexing_settings: Optional[dict] = None,
     ) -> Repository:
         """
         Create a new repository with its associated silo
@@ -106,6 +107,8 @@ class RepositoryService:
             # Media services are stored on the silo, which does the indexing.
             'transcription_service_id': transcription_service_id,
             'video_ai_service_id': video_ai_service_id,
+            # chunking / PDF loader: stored on the silo too (omitted keys -> silo defaults)
+            **(indexing_settings or {}),
         }
         silo = silo_service.create_or_update_silo(
             silo_data, SiloType.REPO, db, enforce_quota=repository.type != PLAYGROUND_MEDIA_REPO_TYPE
@@ -340,7 +343,8 @@ class RepositoryService:
                 media=[],
                 ai_services=ai_services,
                 transcription_service_id=None,
-                video_ai_service_id=None
+                video_ai_service_id=None,
+                **SiloService.indexing_detail_fields(None),
             )
         
         # Existing repository
@@ -447,6 +451,7 @@ class RepositoryService:
             ai_services=ai_services,
             transcription_service_id=repo.transcription_service_id,
             video_ai_service_id=repo.video_ai_service_id,
+            **SiloService.indexing_detail_fields(repo.silo),
             service_warnings=SiloService.service_warnings(repo.silo),
             lifecycle_warnings=ServiceLifecycleService.warnings_for_silo(silo_id, lifecycle_ctx),
         )
@@ -494,6 +499,7 @@ class RepositoryService:
             db,
             transcription_service_id=repo_data.transcription_service_id,
             video_ai_service_id=repo_data.video_ai_service_id,
+            indexing_settings=repo_data.indexing_settings(),
         )
 
     @staticmethod
@@ -528,6 +534,7 @@ class RepositoryService:
             SiloService.apply_media_services(
                 repo.silo, repo_data.transcription_service_id, repo_data.video_ai_service_id, app_id, db,
             )
+            SiloService.apply_indexing_settings(repo.silo, repo_data.indexing_settings())
 
         return RepositoryService.update_repository(
             repo,

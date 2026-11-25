@@ -12,6 +12,15 @@ import { LoadingState } from '../components/ui/LoadingState';
 import { ServiceOptionStatus, serviceStatusId } from '../components/ui/ServiceOptionStatus';
 import { selectableServiceOptions, serviceOptionLabel, type ServiceOptionLike } from '../utils/serviceLifecycle';
 import { MediaServicesFields } from '../components/forms/MediaServicesFields';
+import { IndexingSettingsFields } from '../components/forms/IndexingSettingsFields';
+import CardApp from '../components/ui/CardApp';
+import type { IndexingOptions, IndexingSettings } from '../types/indexing';
+import {
+  hasIndexingErrors,
+  indexingSettingsErrors,
+  initialIndexingSettings,
+  toIndexingPayload,
+} from '../utils/indexingSettings';
 
 interface RepositoryFormData {
   name: string;
@@ -49,6 +58,8 @@ const RepositoryFormPage: React.FC = () => {
   // Values saved on the loaded repository (D-4): the only retired services that stay selectable.
   const [savedMedia, setSavedMedia] = useState<{ transcription?: number | null; video?: number | null }>({});
   const [vectorDbOptions, setVectorDbOptions] = useState<VectorDbOption[]>([]);
+  const [indexingOptions, setIndexingOptions] = useState<IndexingOptions | null>(null);
+  const [indexing, setIndexing] = useState<IndexingSettings | null>(null);
   const [formData, setFormData] = useState<RepositoryFormData>({
     name: '',
     embedding_service_id: undefined,
@@ -93,6 +104,8 @@ const RepositoryFormPage: React.FC = () => {
         setVectorDbOptions(availableVectorDbOptions);
         setAiServices(repository.ai_services ?? []);
         setSavedMedia({ transcription: repository.transcription_service_id, video: repository.video_ai_service_id });
+        setIndexingOptions(repository.indexing_options ?? null);
+        setIndexing(initialIndexingSettings(repository));
 
         const normalizedVectorDbType = (repository.vector_db_type || 'PGVECTOR').toUpperCase();
         const resolvedVectorDbType = availableVectorDbOptions.some((option) => option.code === normalizedVectorDbType)
@@ -152,6 +165,11 @@ const RepositoryFormPage: React.FC = () => {
       return;
     }
 
+    if (indexing && indexingOptions && hasIndexingErrors(indexingSettingsErrors(indexing, indexingOptions))) {
+      setError(t('siloFormPage.indexing.validation.invalid'));
+      return;
+    }
+
     const normalizedVectorDbType = formData.vector_db_type.toUpperCase();
     const repositoryIdNumber = repositoryId ? Number.parseInt(repositoryId, 10) : 0;
     if (!isNewRepository && Number.isNaN(repositoryIdNumber)) {
@@ -165,6 +183,7 @@ const RepositoryFormPage: React.FC = () => {
       vector_db_type: normalizedVectorDbType,
       transcription_service_id: formData.transcription_service_id,
       video_ai_service_id: formData.video_ai_service_id,
+      ...(indexing ? toIndexingPayload(indexing) : {}),
     };
 
     setError(null);
@@ -296,6 +315,20 @@ const RepositoryFormPage: React.FC = () => {
             savedVideoServiceId={savedMedia.video}
             onChange={(field, value) => setFormData({ ...formData, [field]: value ?? undefined })}
           />
+
+          {/* Chunking and PDF loader (stored on the repository's silo) */}
+          {indexing && indexingOptions && (
+            <CardApp className="space-y-4" titulo={t('siloFormPage.indexing.title')}>
+              <IndexingSettingsFields
+                scope="repository"
+                options={indexingOptions}
+                value={indexing}
+                onChange={setIndexing}
+                isEditing={!isNewRepository}
+                disabled={saving}
+              />
+            </CardApp>
+          )}
 
           {/* Action Buttons */}
           <FormActions

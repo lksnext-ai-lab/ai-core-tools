@@ -18,8 +18,10 @@ from core.export_constants import validate_export_version
 from services.embedding_service_import_service import EmbeddingServiceImportService
 from services.output_parser_import_service import OutputParserImportService
 from repositories.silo_repository import SiloRepository
+from services.silo_service import SiloService
 import logging
 from utils.service_lifecycle import SERVICE_KIND_EMBEDDING, RetiredServiceAssignmentError, ensure_assignable
+from utils.error_handlers import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +170,25 @@ class SiloImportService:
             missing_dependencies=missing_dependencies,
             requires_embedding_service_selection=requires_embedding_service_selection,
         )
+
+    @staticmethod
+    def _apply_indexing_settings(silo: Silo, export_silo) -> list[str]:
+        """Copy the exported chunking / PDF loader settings; invalid ones keep the defaults.
+
+        An export from another instance may name a loader this one does not have; the
+        silo is still imported (with defaults) and the summary says so.
+        """
+        settings = {
+            field: getattr(export_silo, field)
+            for field in ("chunk_size", "chunk_overlap", "pdf_loader", "pdf_loader_options")
+            if getattr(export_silo, field, None) is not None
+        }
+        try:
+            SiloService.apply_indexing_settings(silo, settings)
+        except ValidationError as exc:
+            logger.warning("Imported silo keeps default indexing settings: %s", exc)
+            return [f"Indexing settings not applied ({exc}); defaults are used"]
+        return []
 
     def import_silo(
         self,
@@ -373,6 +394,7 @@ class SiloImportService:
                 existing_silo.metadata_definition_id = metadata_definition_id
                 existing_silo.fixed_metadata = export_data.silo.fixed_metadata
                 existing_silo.description = export_data.silo.description
+                indexing_warnings = self._apply_indexing_settings(existing_silo, export_data.silo)
                 # CRITICAL: Do NOT modify vector collection or vector data!
 
                 self.session.add(existing_silo)
@@ -391,7 +413,7 @@ class SiloImportService:
                     created=False,
                     conflict_detected=True,
                     dependencies_created=dependencies_created,
-                    warnings=["Existing vector data preserved"],
+                    warnings=["Existing vector data preserved", *indexing_warnings],
                     next_steps=[],
                 )
 
@@ -407,6 +429,7 @@ class SiloImportService:
             description=export_data.silo.description,
             status="active",  # Default status
         )
+        indexing_warnings = self._apply_indexing_settings(new_silo, export_data.silo)
 
         self.session.add(new_silo)
         self.session.commit()
@@ -425,7 +448,7 @@ class SiloImportService:
             created=True,
             conflict_detected=existing_silo is not None,
             dependencies_created=dependencies_created,
-            warnings=[],
+            warnings=indexing_warnings,
             next_steps=[
                 "Upload documents to the silo to generate vector embeddings",
                 "Configure embedding service API key if not already set",

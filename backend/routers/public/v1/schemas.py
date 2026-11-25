@@ -139,6 +139,11 @@ class PublicSiloSchema(BaseModel):
     # Media (video/audio) indexing: transcription is required, video analysis optional
     transcription_service_id: Optional[int] = None
     video_ai_service_id: Optional[int] = None
+    # Indexing settings (set them on create/update; reindex to apply them to existing content)
+    chunk_size: Optional[int] = None
+    chunk_overlap: Optional[int] = None
+    pdf_loader: Optional[str] = None
+    pdf_loader_options: Optional[Dict[str, Any]] = None
 
 
 class PublicSiloResponseSchema(BaseModel):

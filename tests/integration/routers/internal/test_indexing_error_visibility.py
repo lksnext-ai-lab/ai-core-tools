@@ -72,7 +72,7 @@ def _revoked_key_error():
     )
 
 
-def _extract(path, file_extension, base_metadata):
+def _extract(path, file_extension, base_metadata, indexing=None):
     return [Document(page_content="chunk", metadata={**base_metadata})]
 
 
