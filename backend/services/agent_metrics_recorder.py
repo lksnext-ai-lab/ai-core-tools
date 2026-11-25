@@ -24,11 +24,15 @@ def record_agent_execution(*, event_id, fresh_agent, user_context, started_at,
                            finished_at, duration_ms, status, error_code,
                            error_message, result, image_files, message,
                            collector=None, time_to_first_token_ms=None,
+                           event_overrides=None, system_one_answers=None,
                            ai_service_override=None) -> None:
     """Build the metrics payload and persist it in the background. Never raises.
 
     ``collector`` (an AgentMetricsCollector attached to the run) is the source of
     token usage and tool calls; without it they are derived from ``result``.
+    ``event_overrides`` replaces derived event fields (agents that do not run an LLM chain,
+    like System One, supply their own usage) and ``system_one_answers`` are the per-question
+    rows stored with the event.
     ``ai_service_override`` (flexible chat: the turn's AI service) replaces the agent's own
     service for model/provider/``ai_service_id``. The payload is built synchronously here, so the
     ORM object is read inside the request session; only plain data reaches the background task.
@@ -55,6 +59,8 @@ def record_agent_execution(*, event_id, fresh_agent, user_context, started_at,
             message=message,
             collector=collector,
             time_to_first_token_ms=time_to_first_token_ms,
+            event_overrides=event_overrides,
+            system_one_answers=system_one_answers,
             ai_service_override=ai_service_override,
         )
         task = loop.create_task(persist_metrics_payload(payload))
@@ -127,6 +133,7 @@ def build_metrics_payload(*, event_id, fresh_agent, user_context, started_at,
                           finished_at, duration_ms, status, error_code,
                           error_message, result, image_files, message,
                           collector=None, time_to_first_token_ms=None,
+                          event_overrides=None, system_one_answers=None,
                           ai_service_override=None) -> dict[str, Any]:
     """Build the {"event": ..., "tool_calls": [...]} payload from the execution context.
 
@@ -205,10 +212,16 @@ def build_metrics_payload(*, event_id, fresh_agent, user_context, started_at,
         "response_chars": response_chars,
     }
 
-    return {
+    if event_overrides:
+        event_payload.update(event_overrides)
+
+    payload = {
         "event": event_payload,
         "tool_calls": tool_calls,
     }
+    if system_one_answers:
+        payload["system_one_answers"] = system_one_answers
+    return payload
 
 
 def _parse_dt(value: Optional[Any]) -> Optional[datetime]:
@@ -221,6 +234,7 @@ async def persist_metrics_payload(payload: dict[str, Any]) -> None:
     """Persist a metrics payload on its own DB session. Best-effort, never raises."""
     from db.database import SessionLocal
     from models.agent_execution_event import AgentExecutionEvent
+    from models.agent_system_one_answer import AgentSystemOneAnswer
     from models.agent_tool_call import AgentToolCall
 
     db = SessionLocal()
@@ -252,6 +266,9 @@ async def persist_metrics_payload(payload: dict[str, Any]) -> None:
             input_tokens=event_data.get('input_tokens'),
             output_tokens=event_data.get('output_tokens'),
             total_tokens=event_data.get('total_tokens'),
+            summarization_calls=event_data.get('summarization_calls') or 0,
+            summarization_input_tokens=event_data.get('summarization_input_tokens') or 0,
+            summarization_output_tokens=event_data.get('summarization_output_tokens') or 0,
             tool_calls=event_data.get('tool_calls'),
             retrieved_docs=event_data.get('retrieved_docs'),
             had_files=event_data.get('had_files', False),
@@ -277,6 +294,9 @@ async def persist_metrics_payload(payload: dict[str, Any]) -> None:
                 error_message=tc.get('error_message'),
                 started_at=_parse_dt(tc['started_at']),
             ))
+
+        for answer in payload.get('system_one_answers', []):
+            db.add(AgentSystemOneAnswer(event_id=event.event_id, **answer))
 
         db.commit()
     except Exception:

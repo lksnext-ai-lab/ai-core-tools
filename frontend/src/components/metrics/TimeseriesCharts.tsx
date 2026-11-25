@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react';
+import { isolatedPointIndexes } from '../../utils/chartPoints';
 import { useTranslation } from 'react-i18next';
 import {
   Area,
@@ -111,6 +112,13 @@ export function TokensChart({ data }: ChartProps) {
 export function LatencyChart({ data }: ChartProps) {
   const { t } = useTranslation('common');
   const palette = useChartPalette();
+  // A single bucket with data (a new agent, a quiet week) has no segment to draw: show those points as dots.
+  const lonely50 = isolatedPointIndexes(data.points.map((p) => p.latency_p50_ms));
+  const lonely95 = isolatedPointIndexes(data.points.map((p) => p.latency_p95_ms));
+  const dotFor = (lonely: Set<number>, color: string) => ({ cx, cy, index }: { cx?: number; cy?: number; index?: number }) =>
+    index !== undefined && lonely.has(index) && cx !== undefined && cy !== undefined
+      ? <circle key={`dot-${index}`} cx={cx} cy={cy} r={4} fill={color} />
+      : <g key={`dot-${index}`} />;
   return (
     <ChartCard title={t('metricsDashboard.charts.latency')} subtitle={t('metricsDashboard.charts.latencyDescription')}>
       <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
@@ -120,8 +128,8 @@ export function LatencyChart({ data }: ChartProps) {
           <YAxis width={52} tickFormatter={(v) => formatMs(v)} {...axisProps(palette)} />
           <Tooltip {...tooltipProps(palette, data, (v) => formatMs(v))} />
           <Legend {...legendProps} />
-          <Line type="monotone" dataKey="latency_p50_ms" name="p50" stroke={palette.primary} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
-          <Line type="monotone" dataKey="latency_p95_ms" name="p95" stroke={palette.secondary} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+          <Line type="monotone" dataKey="latency_p50_ms" name="p50" stroke={palette.primary} strokeWidth={2} dot={dotFor(lonely50, palette.primary)} activeDot={{ r: 4 }} connectNulls />
+          <Line type="monotone" dataKey="latency_p95_ms" name="p95" stroke={palette.secondary} strokeWidth={2} dot={dotFor(lonely95, palette.secondary)} activeDot={{ r: 4 }} connectNulls />
         </LineChart>
       </ResponsiveContainer>
     </ChartCard>

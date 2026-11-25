@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Bot, ArrowUp, ArrowDownToLine, Gamepad2, Pencil, Trash2, FileText, ArrowUpRight } from 'lucide-react';
+import { Bot, ArrowUp, ArrowDownToLine, Gamepad2, Pencil, Trash2, FileText, ArrowUpRight, Gauge } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { agentRowStatus } from '../utils/systemOneStatus';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
@@ -44,6 +45,11 @@ interface Agent {
     provider: string;
   };
   lifecycle_warnings?: ServiceLifecycleWarning[];
+  system_one_service?: {
+    service_id: number;
+    name: string;
+    model: string;
+  } | null;
 }
 
 // Define the App type
@@ -62,6 +68,8 @@ function AgentsPage() {
   const mutate = useApiMutation();
 
   const [agents, setAgents] = useState<Agent[]>([]);
+  // The column is titled "AI/S1 Service" only when a System One agent is in the list.
+  const hasSystemOneAgents = agents.some((agent) => agent.type === 'system_one_agent');
   const [scheduledTaskCounts, setScheduledTaskCounts] = useState<Record<number, number>>({});
   const [app, setApp] = useState<App | null>(null);
   const [loading, setLoading] = useState(true);
@@ -246,6 +254,8 @@ function AgentsPage() {
     switch (type) {
       case 'ocr_agent':
         return FileText;
+      case 'system_one_agent':
+        return Gauge;
       case 'agent':
       default:
         return Bot;
@@ -256,6 +266,8 @@ function AgentsPage() {
     switch (type) {
       case 'ocr_agent':
         return t('agentsPage.agentTypes.ocr');
+      case 'system_one_agent':
+        return t('agentsPage.agentTypes.systemOne');
       case 'agent':
       default:
         return t('agentsPage.agentTypes.ai');
@@ -393,9 +405,20 @@ function AgentsPage() {
             )
           },
           {
-            header: t('agentsPage.columns.aiService'),
-            render: (agent) => (
-              agent.ai_service ? (
+            // One column for both kinds: an LLM agent's AI service, a System One agent's S1 service.
+            header: hasSystemOneAgents ? t('agentsPage.columns.aiOrSystemOneService') : t('agentsPage.columns.aiService'),
+            render: (agent) => {
+              if (agent.type === 'system_one_agent') {
+                return agent.system_one_service ? (
+                  <div className="text-sm">
+                    <div className="font-medium text-fg dark:text-fg-dark">{agent.system_one_service.name}</div>
+                    <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{agent.system_one_service.model} • System One</div>
+                  </div>
+                ) : (
+                  <span className="text-fg-secondary dark:text-fg-secondary-dark italic text-sm">{t('agentsPage.noSystemOneService')}</span>
+                );
+              }
+              return agent.ai_service ? (
                 <div className="text-sm">
                   <div className="font-medium text-fg dark:text-fg-dark">
                     {agent.ai_service.name}
@@ -406,16 +429,23 @@ function AgentsPage() {
                 </div>
               ) : (
                 <span className="text-fg-secondary dark:text-fg-secondary-dark italic text-sm">{t('agentsPage.noAIService')}</span>
-              )
-            )
+              );
+            }
           },
           {
             header: t('agentsPage.columns.status'),
-            render: () => (
-              <span className="inline-flex items-center justify-center px-[9px] py-[3px] text-[11.5px] rounded-[200px] w-24 bg-success-bg text-success">
-                {' '}{t('agentsPage.active')}
-              </span>
-            )
+            render: (agent) => {
+              // A System One agent whose service was deleted cannot evaluate anything.
+              const inoperative = agentRowStatus(agent).kind === 'inoperative';
+              return (
+                <span
+                  title={inoperative ? t('agentsPage.inoperativeDetail') : undefined}
+                  className={`inline-flex items-center justify-center px-[9px] py-[3px] text-[11.5px] rounded-[200px] w-24 ${inoperative ? 'bg-bronze-bg text-bronze-strong dark:bg-bronze-bg-dark dark:text-bronze-strong-dark' : 'bg-success-bg text-success'}`}
+                >
+                  {' '}{inoperative ? t('agentsPage.inoperative') : t('agentsPage.active')}
+                </span>
+              );
+            }
           },
           {
             header: t('agentsPage.columns.scheduling'),

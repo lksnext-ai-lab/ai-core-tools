@@ -27,6 +27,7 @@ function ProviderStep({
   let subtitleKey = 'serviceWizard.providerStep.subtitleEmbedding';
   if (kind === 'ai') subtitleKey = 'serviceWizard.providerStep.subtitleAi';
   else if (kind === 'sandbox') subtitleKey = 'serviceWizard.providerStep.subtitleSandbox';
+  else if (kind === 'system_one') subtitleKey = 'serviceWizard.providerStep.subtitleSystemOne';
 
   return (
     <div className="space-y-4">
@@ -57,7 +58,7 @@ function ProviderStep({
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-fg dark:text-fg-dark">{p.label}</p>
-                  {!p.supportsModelListing && (
+                  {kind !== 'system_one' && !p.supportsModelListing && (
                     <p className="mt-1 inline-flex text-[10px] uppercase tracking-wide font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
                       {t('serviceWizard.providerStep.manual')}
                     </p>

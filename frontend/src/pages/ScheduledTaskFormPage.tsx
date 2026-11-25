@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { canBeScheduled } from "../utils/systemOneStatus";
 import {
   apiService,
   type OutputDestination,
@@ -119,7 +120,7 @@ export default function ScheduledTaskFormPage() {
       .then((items) => {
         if (active)
           setAgents(
-            items.map((item) => ({ agent_id: item.agent_id, name: item.name })),
+            items.filter(canBeScheduled).map((item) => ({ agent_id: item.agent_id, name: item.name })),
           );
       })
       .catch(() => {

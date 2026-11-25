@@ -27,6 +27,15 @@ export function isoFromDateInput(value: string): string | null {
   return value ? `${value}T00:00:00Z` : null;
 }
 
+/**
+ * Value to send for `end_of_service_at` on save. A stored non-midnight timestamp is kept untouched unless
+ * the picked day was changed, so saving an unrelated field never rewrites it. `stored` must be the loaded
+ * entity's value, not the form's.
+ */
+export function endOfServiceForSave(stored: string | null | undefined, dateInput: string): string | null {
+  return stored && dateInputValueFromIso(stored) === dateInput ? stored : isoFromDateInput(dateInput);
+}
+
 /** Minimal shape of a service offered in a selection dropdown (AI, embedding or sandbox). */
 export interface ServiceOptionLike {
   readonly service_id: number;
@@ -106,10 +115,13 @@ export const SERVICE_WARNING_STRINGS = {
     get embedding() { return i18n.t('serviceWarnings.roles.embedding'); },
     get sandbox() { return i18n.t('serviceWarnings.roles.sandbox'); },
     get sandbox_app_default() { return i18n.t('serviceWarnings.roles.sandbox_app_default'); },
+    get system_one() { return i18n.t('serviceWarnings.roles.system_one'); },
+    get summarization() { return i18n.t('serviceWarnings.roles.summarization'); },
   },
   silo_embedding: (via: string) => i18n.t('serviceWarnings.siloEmbedding', { via }),
   middleware: (via: string) => i18n.t('serviceWarnings.middleware', { via }),
   sandboxWarning: (date: string) => i18n.t('serviceWarnings.sandboxWarning', { date }),
+  systemOneWarning: (date: string) => i18n.t('serviceWarnings.systemOneWarning', { date }),
   compactRetired: (count: number) => i18n.t('serviceWarnings.compactRetired', { count }),
   compactDeprecated: (count: number) => i18n.t('serviceWarnings.compactDeprecated', { count }),
   compactAria: (items: string) => i18n.t('serviceWarnings.compactAria', { items }),

@@ -28,9 +28,11 @@ interface Props {
   description?: string;
   /** System view: show app names and the active-apps KPI. */
   systemScope?: boolean;
+  /** A System One agent has no streaming, tools or LLM turns: its own cards (server tokens, summarization) replace those. */
+  variant?: 'default' | 'system_one';
 }
 
-export function MetricsDashboard({ api, dimensions, title, description, systemScope = false }: Props) {
+export function MetricsDashboard({ api, dimensions, title, description, systemScope = false, variant = 'default' }: Props) {
   const { t } = useTranslation('common');
   const [range, setRange] = useState<TimeRange>('7d');
   const [dimension, setDimension] = useState<BreakdownDimension>(dimensions[0]);
@@ -72,29 +74,44 @@ export function MetricsDashboard({ api, dimensions, title, description, systemSc
   const kpis = useMemo(() => {
     if (!summary) return null;
     const { current: c, previous: p } = summary;
-    return [
+    const systemOne = variant === 'system_one';
+    const cards = [
       { label: t('metricsDashboard.kpi.executions'), value: formatCount(c.executions), change: relativeChange(c.executions, p.executions),
         hint: c.subagent_calls ? t('metricsDashboard.kpi.subAgentCalls', { count: c.subagent_calls, formattedCount: formatCount(c.subagent_calls) }) : undefined },
       { label: t('metricsDashboard.kpi.errorRate'), value: formatPercent(c.error_rate), change: relativeChange(c.error_rate, p.error_rate),
         higherIsBetter: false, hint: c.timeouts ? t('metricsDashboard.kpi.timeouts', { count: c.timeouts, formattedCount: formatCount(c.timeouts) }) : t('metricsDashboard.kpi.failed', { count: c.errors, formattedCount: formatCount(c.errors) }) },
       { label: t('metricsDashboard.kpi.latencyP95'), value: formatMs(c.latency_p95_ms), change: relativeChange(c.latency_p95_ms, p.latency_p95_ms),
         higherIsBetter: false, hint: t('metricsDashboard.kpi.latencyMedianHint', { value: formatMs(c.latency_p50_ms) }) },
-      { label: t('metricsDashboard.kpi.timeToFirstToken'), value: formatMs(c.ttft_p50_ms), change: relativeChange(c.ttft_p50_ms, p.ttft_p50_ms),
-        higherIsBetter: false, hint: t('metricsDashboard.kpi.streamingOnly') },
-      { label: t('metricsDashboard.kpi.totalTokens'), value: formatCount(c.total_tokens), change: relativeChange(c.total_tokens, p.total_tokens),
+      // Time to first token only exists for streamed answers: System One returns one response.
+      ...(systemOne ? [] : [
+        { label: t('metricsDashboard.kpi.timeToFirstToken'), value: formatMs(c.ttft_p50_ms), change: relativeChange(c.ttft_p50_ms, p.ttft_p50_ms),
+          higherIsBetter: false, hint: t('metricsDashboard.kpi.streamingOnly') },
+      ]),
+      { label: systemOne ? t('metricsDashboard.kpi.systemOneTokens') : t('metricsDashboard.kpi.totalTokens'), value: formatCount(c.total_tokens), change: relativeChange(c.total_tokens, p.total_tokens),
         hint: t('metricsDashboard.kpi.inputOutputTokens', { input: formatCount(c.input_tokens), output: formatCount(c.output_tokens) }) },
-      { label: t('metricsDashboard.kpi.tokensPerExecution'), value: c.avg_tokens_per_execution === null ? '—' : formatCount(Math.round(c.avg_tokens_per_execution)),
-        change: relativeChange(c.avg_tokens_per_execution, p.avg_tokens_per_execution), higherIsBetter: false,
-        hint: t('metricsDashboard.kpi.llmCalls', { count: c.llm_calls, formattedCount: formatCount(c.llm_calls) }) },
-      { label: t('metricsDashboard.kpi.toolCalls'), value: formatCount(c.tool_calls), change: relativeChange(c.tool_calls, p.tool_calls),
-        hint: c.tool_errors ? t('metricsDashboard.kpi.failed', { count: c.tool_errors, formattedCount: formatCount(c.tool_errors) }) : undefined },
+      systemOne
+        ? { label: t('metricsDashboard.kpi.systemOneTokensPerExecution'), value: c.avg_tokens_per_execution === null ? '—' : formatCount(Math.round(c.avg_tokens_per_execution)),
+            change: relativeChange(c.avg_tokens_per_execution, p.avg_tokens_per_execution), higherIsBetter: false,
+            hint: t('metricsDashboard.kpi.systemOneTokensHint') }
+        : { label: t('metricsDashboard.kpi.tokensPerExecution'), value: c.avg_tokens_per_execution === null ? '—' : formatCount(Math.round(c.avg_tokens_per_execution)),
+            change: relativeChange(c.avg_tokens_per_execution, p.avg_tokens_per_execution), higherIsBetter: false,
+            hint: t('metricsDashboard.kpi.llmCalls', { count: c.llm_calls, formattedCount: formatCount(c.llm_calls) }) },
+      ...(systemOne ? [
+        { label: t('metricsDashboard.kpi.summarizationCalls'), value: formatCount(c.summarization_calls ?? 0),
+          change: relativeChange(c.summarization_calls ?? 0, p.summarization_calls ?? 0),
+          hint: t('metricsDashboard.kpi.inputOutputTokens', { input: formatCount(c.summarization_input_tokens ?? 0), output: formatCount(c.summarization_output_tokens ?? 0) }) },
+      ] : [
+        { label: t('metricsDashboard.kpi.toolCalls'), value: formatCount(c.tool_calls), change: relativeChange(c.tool_calls, p.tool_calls),
+          hint: c.tool_errors ? t('metricsDashboard.kpi.failed', { count: c.tool_errors, formattedCount: formatCount(c.tool_errors) }) : undefined },
+      ]),
       systemScope
         ? { label: t('metricsDashboard.kpi.activeApps'), value: formatCount(c.active_apps), change: relativeChange(c.active_apps, p.active_apps),
             hint: t('metricsDashboard.kpi.activeAppsHint', { agents: formatCount(c.active_agents), users: formatCount(c.active_users) }) }
         : { label: t('metricsDashboard.kpi.activeUsers'), value: formatCount(c.active_users), change: relativeChange(c.active_users, p.active_users),
             hint: t('metricsDashboard.kpi.activeAgents', { count: c.active_agents, formattedCount: formatCount(c.active_agents) }) },
     ];
-  }, [summary, systemScope, t]);
+    return cards;
+  }, [summary, systemScope, variant, t]);
 
   return (
     <div className="space-y-6">

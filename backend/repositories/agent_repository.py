@@ -1,9 +1,10 @@
 from typing import Optional, List, Dict, Any, Set
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectin_polymorphic, selectinload
 from models.agent import Agent, AgentMCP, AgentTool, AgentSkill
 from models.middleware import AgentMiddleware
 from models.ocr_agent import OCRAgent
+from models.system_one_agent import SystemOneAgent
 from models.ai_service import AIService
 from models.sandbox_service import SandboxService
 from models.silo import Silo
@@ -12,6 +13,7 @@ from models.mcp_config import MCPConfig
 from models.skill import Skill
 from repositories.ai_service_repository import AIServiceRepository
 from repositories.sandbox_service_repository import SandboxServiceRepository
+from repositories.system_one_service_repository import SystemOneServiceRepository
 from repositories.silo_repository import SiloRepository
 from repositories.output_parser_repository import OutputParserRepository
 from repositories.mcp_config_repository import MCPConfigRepository
@@ -80,9 +82,14 @@ class AgentRepository:
         return db.query(Agent.agent_id).limit(1).first() is not None
     
     @staticmethod
+    def get_system_one_agent_by_id(db: Session, agent_id: int) -> Optional[SystemOneAgent]:
+        """Get System One agent by ID from SystemOneAgent table"""
+        return db.query(SystemOneAgent).filter(SystemOneAgent.agent_id == agent_id).first()
+
+    @staticmethod
     def get_agent_by_id_and_type(
         db: Session, agent_id: int, agent_type: str = 'basic', include_internal: bool = False
-    ) -> Agent | OCRAgent:
+    ) -> Agent | OCRAgent | SystemOneAgent:
         """Get agent by ID and type.
 
         Args:
@@ -103,20 +110,32 @@ class AgentRepository:
 
         if agent_type == 'ocr' or agent_type == 'ocr_agent':
             return _ocr()
+        if agent_type == 'system_one' or agent_type == 'system_one_agent':
+            # ponytail: the internal chat agent is never a System One agent, no visibility filter needed
+            return AgentRepository.get_system_one_agent_by_id(db, agent_id)
         if agent_type == 'basic' or agent_type == 'agent':
             return _basic()
         return _basic() or _ocr()
 
     @staticmethod
-    def get_by_app_id(db: Session, app_id: int) -> List[Agent]:
-        """Get all agents for a specific app"""
+    def get_by_app_id(db: Session, app_id: int, with_subclasses: bool = False) -> List[Agent]:
+        """Get all agents for a specific app.
+
+        ``with_subclasses`` batch-loads the OCR / System One rows and the System One service (no N+1) for
+        callers that read them; the others only need the base columns.
+        """
+        query = db.query(Agent)
+        if with_subclasses:
+            query = query.options(
+                selectin_polymorphic(Agent, [OCRAgent, SystemOneAgent]),
+                selectinload(SystemOneAgent.system_one_service),
+            )
         return (
-            db.query(Agent)
-            .filter(Agent.app_id == app_id, AgentRepository.visible_agents_clause())
+            query.filter(Agent.app_id == app_id, AgentRepository.visible_agents_clause())
             .order_by(Agent.create_date.desc())
             .all()
         )
-    
+
     @staticmethod
     def get_tool_agents_by_app_id(db: Session, app_id: int, exclude_agent_id: Optional[int] = None) -> List[Agent]:
         """Get agents that are marked as tools for a specific app"""
@@ -157,12 +176,13 @@ class AgentRepository:
     
     @staticmethod
     def delete_by_id(db: Session, agent_id: int) -> bool:
-        """Delete an agent by its ID (checks both Agent and OCRAgent tables)"""
+        """Delete an agent by its ID (checks the Agent, OCRAgent and SystemOneAgent tables)"""
         try:
-            # Check both Agent and OCRAgent tables
             agent = AgentRepository.get_by_id(db, agent_id)
             if not agent:
                 agent = AgentRepository.get_ocr_agent_by_id(db, agent_id)
+            if not agent:
+                agent = AgentRepository.get_system_one_agent_by_id(db, agent_id)
             
             if agent:
                 return AgentRepository._delete_agent_with_associations(db, agent)
@@ -389,6 +409,7 @@ class AgentRepository:
                 "supports_video": s.supports_video,
                 "end_of_service_at": to_utc(s.end_of_service_at),
                 "deprecation_notice": s.deprecation_notice,
+                "is_system": s.app_id is None,
             }
             for s in ai_services
         ]
@@ -442,9 +463,21 @@ class AgentRepository:
             for m in middlewares
         ]
 
+        # System One services (per app only)
+        system_one_services_list = [
+            {
+                "service_id": s.service_id,
+                "name": s.name,
+                "end_of_service_at": to_utc(s.end_of_service_at),
+                "deprecation_notice": s.deprecation_notice,
+            }
+            for s in SystemOneServiceRepository.get_by_app_id(db, app_id)
+        ]
+
         return {
             'ai_services': ai_services_list,
             'sandbox_services': sandbox_services_list,
+            'system_one_services': system_one_services_list,
             'silos': silos_list,
             'output_parsers': output_parsers_list,
             'tools': tools_list,

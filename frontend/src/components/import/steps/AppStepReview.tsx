@@ -34,6 +34,7 @@ type ReviewSkippedItem = {
 
 const COMPONENT_TYPE_TRANSLATION_KEYS: Record<string, string> = {
   ai_service: 'aiServices',
+  system_one_service: 'systemOneServices',
   embedding_service: 'embeddingServices',
   output_parser: 'outputParsers',
   mcp_config: 'mcpConfigs',
@@ -61,6 +62,7 @@ function buildReviewRows(
 ): { selectedItems: ReviewSelectedItem[]; skippedItems: ReviewSkippedItem[] } {
   const categories = [
     { type: 'ai_service', items: preview.ai_services },
+    { type: 'system_one_service', items: preview.system_one_services },
     { type: 'embedding_service', items: preview.embedding_services },
     { type: 'output_parser', items: preview.output_parsers },
     { type: 'mcp_config', items: preview.mcp_configs },

@@ -1,4 +1,4 @@
-"""End-of-service lifecycle of AI, embedding and sandbox services.
+"""End-of-service lifecycle of AI, embedding, sandbox and System One services.
 
 Pure module (no DB access) so it can be used from ``tools/``, ``utils/`` and ``services/``.
 A service is *retired* once ``end_of_service_at`` has passed, whatever the warning window
@@ -21,6 +21,7 @@ logger = get_logger(__name__)
 SERVICE_KIND_AI = "ai"
 SERVICE_KIND_EMBEDDING = "embedding"
 SERVICE_KIND_SANDBOX = "sandbox"
+SERVICE_KIND_SYSTEM_ONE = "system_one"
 
 _UNKNOWN = "unknown"
 
@@ -116,10 +117,18 @@ def sandbox_retired_message(name: str, eos: datetime, notice: Optional[str] = No
     )
 
 
+def system_one_retired_message(name: str, eos: datetime, notice: Optional[str] = None) -> str:
+    return _with_notice(
+        f"{_retired_on(name, eos)} Agents using it cannot evaluate text until another System One service is selected.",
+        notice,
+    )
+
+
 _MESSAGE_BUILDERS = {
     SERVICE_KIND_AI: ai_retired_message,
     SERVICE_KIND_EMBEDDING: embedding_retired_message,
     SERVICE_KIND_SANDBOX: sandbox_retired_message,
+    SERVICE_KIND_SYSTEM_ONE: system_one_retired_message,
 }
 
 

@@ -26,6 +26,7 @@ import {
   Webhook,
   Target,
   Activity,
+  Gauge,
   MessageSquare,
 } from 'lucide-react';
 import type { NavigationConfig } from './types';
@@ -181,6 +182,12 @@ export const defaultNavigation: NavigationConfig = {
       path: '/apps/:appId/settings/sandbox-services',
       name: 'Sandbox Services',
       icon: <Box size={16} />,
+      section: 'settings'
+    },
+    {
+      path: '/apps/:appId/settings/system-one-services',
+      name: 'System One Services',
+      icon: <Gauge size={16} />,
       section: 'settings'
     },
     {

@@ -253,7 +253,7 @@ interface ModelCardProps {
   readonly onSelect: () => void;
 }
 
-function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
+export function ModelCard({ model, selected, onSelect }: Readonly<ModelCardProps>) {
   const { t } = useTranslation('common');
   const recent = isRecent(model.created_at);
   const capabilityLabels = [

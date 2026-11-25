@@ -278,6 +278,7 @@ class MCPServerService:
                     Agent.agent_id == agent_id,
                     Agent.app_id == app_id,
                     Agent.is_tool == True,
+                    Agent.type != 'system_one_agent',  # evaluators, not chat agents: not exposed as MCP tools
                     Agent.visible_clause(),
                 ).first()
                 if agent:
@@ -334,6 +335,7 @@ class MCPServerService:
                     Agent.agent_id == agent_id,
                     Agent.app_id == app_id,
                     Agent.is_tool == True,
+                    Agent.type != 'system_one_agent',  # evaluators, not chat agents: not exposed as MCP tools
                     Agent.visible_clause(),
                 ).first()
                 if agent:
@@ -352,6 +354,7 @@ class MCPServerService:
         agents = db.query(Agent).filter(
             Agent.app_id == app_id,
             Agent.is_tool == True,
+            Agent.type != 'system_one_agent',  # evaluators, not chat agents: not exposed as MCP tools
             Agent.visible_clause(),
         ).all()
 

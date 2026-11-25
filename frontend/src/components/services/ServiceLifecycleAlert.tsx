@@ -32,6 +32,7 @@ function hintText(w: ServiceLifecycleWarning): string | null {
   const date = formatEndOfServiceDate(w.end_of_service_at);
   if (w.kind === 'embedding') return SERVICE_LIFECYCLE_STRINGS.embeddingWarning(date);
   if (w.kind === 'sandbox') return SERVICE_WARNING_STRINGS.sandboxWarning(date);
+  if (w.kind === 'system_one') return SERVICE_WARNING_STRINGS.systemOneWarning(date);
   return null;
 }
 

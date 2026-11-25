@@ -282,7 +282,7 @@ class TestRawLookupAllowList:
 
     ALLOWED = {
         "repositories/agent_execution_repository.py": 1,  # request-count bump must work for the internal agent
-        "services/agent_service.py": 4,  # update_agent_tools/mcps/skills (each guarded) + delete_agent (cascade)
+        "services/agent_service.py": 5,  # update_agent_tools/mcps/skills (each guarded) + delete_agent (cascade) + System One type-change check (after _ensure_not_internal)
         "repositories/agent_repository.py": 1,  # delete_by_id (cascade deletion)
     }
 

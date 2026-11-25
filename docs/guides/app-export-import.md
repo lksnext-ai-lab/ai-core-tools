@@ -21,6 +21,7 @@ This guide documents the internal API endpoints and the export file contents use
 **Export includes**:
 
 - AI services (API keys removed)
+- System One services (URL, model and concurrency; token never exported, see [System One](system-one.md))
 - Embedding services (API keys removed)
 - Output parsers
 - MCP configs (secrets removed)
@@ -135,6 +136,7 @@ file=@app-export.json
 **Component selection keys**:
 
 - `ai_service`
+- `system_one_service`
 - `embedding_service`
 - `output_parser`
 - `mcp_config`

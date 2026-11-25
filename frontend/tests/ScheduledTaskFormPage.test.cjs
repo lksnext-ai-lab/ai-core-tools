@@ -76,6 +76,7 @@ function mount(overrides = {}) {
     },
     '../components/ui/CardApp': { __esModule: true, default: 'CardApp' },
     '../services/api': { apiService },
+    '../utils/systemOneStatus': { canBeScheduled: (agent) => agent.type !== 'system_one_agent' },
     '../components/ui/ConfirmationModal': () => null,
     '../components/ui/SidePanel': { SidePanel: 'SidePanel' },
     './ScheduledTaskDetailPage': { __esModule: true, default: 'ScheduledTaskDetailPage' },

@@ -1,4 +1,4 @@
-"""Shared end-of-service schema fragments for AI, embedding and sandbox services."""
+"""Shared end-of-service schema fragments for AI, embedding, sandbox and System One services."""
 
 from datetime import datetime
 from typing import List, Literal, Optional
@@ -34,10 +34,10 @@ class ServiceLifecycleWarningSchema(BaseModel):
 
     service_id: int
     service_name: str
-    kind: Literal["ai", "embedding", "sandbox"]
+    kind: Literal["ai", "embedding", "sandbox", "system_one"]
     role: Literal[
         "llm", "ocr_vision", "transcription", "video", "media_embedding", "silo_embedding", "middleware", "embedding",
-        "sandbox",
+        "sandbox", "system_one", "summarization",
     ]
     # Silo name (role silo_embedding), middleware name (role middleware) or "app default" (role sandbox).
     via: Optional[str] = None

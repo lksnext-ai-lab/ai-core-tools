@@ -99,6 +99,7 @@
       "aiServices": "AI Services",
       "embeddingServices": "Embedding Services",
       "sandboxServices": "Sandbox Services",
+      "systemOneServices": "System One Services",
       "mcpConfigs": "MCP Configs",
       "apiKeys": "API Keys",
       "dataStructures": "Data Structures",
@@ -1914,7 +1915,9 @@
       "media_embedding": "Media embedding",
       "embedding": "Embedding",
       "sandbox": "Code interpreter sandbox",
-      "sandbox_app_default": "Code interpreter sandbox (app default)"
+      "sandbox_app_default": "Code interpreter sandbox (app default)",
+      "system_one": "System One",
+      "summarization": "Summarization LLM"
     },
     "siloEmbedding": "Embedding (via silo {{via}})",
     "middleware": "Middleware {{via}}",
@@ -1923,7 +1926,8 @@
     "compactRetired_other": "{{count}} retired services",
     "compactDeprecated_one": "{{count}} deprecated service",
     "compactDeprecated_other": "{{count}} deprecated services",
-    "compactAria": "Service lifecycle: {{items}}"
+    "compactAria": "Service lifecycle: {{items}}",
+    "systemOneWarning": "Agents using this System One service stop working on {{date}}. Assign them another System One service before then."
   },
   "serviceUsage": {
     "action": "Used by",
@@ -2025,7 +2029,8 @@
       "subtitleAi": "Pick the provider that hosts the chat, vision or audio model you want to use.",
       "subtitleEmbedding": "Pick the provider for the embedding model that will index your data.",
       "subtitleSandbox": "Pick the provider that will host your sandbox environment.",
-      "manual": "Manual"
+      "manual": "Manual",
+      "subtitleSystemOne": "Pick the server that answers the closed questions with probabilities."
     },
     "credentialsStep": {
       "providerNotFound": "Provider not found",
@@ -2244,7 +2249,9 @@
         "agents_one": "Agent",
         "agents_other": "Agents",
         "apps_one": "App",
-        "apps_other": "Apps"
+        "apps_other": "Apps",
+        "systemOneServices_one": "System One Service",
+        "systemOneServices_other": "System One Services"
       }
     },
     "appSteps": {
@@ -3032,7 +3039,8 @@
     "noDescription": "No description",
     "agentTypes": {
       "ocr": "OCR Agent",
-      "ai": "AI Agent"
+      "ai": "AI Agent",
+      "systemOne": "System One Agent"
     },
     "columns": {
       "agent": "Agent",
@@ -3043,7 +3051,8 @@
       "scheduling": "Scheduling",
       "usage": "Usage",
       "created": "Created",
-      "actions": "Actions"
+      "actions": "Actions",
+      "aiOrSystemOneService": "AI/S1 Service"
     },
     "noAIService": "No AI Service",
     "active": "Active",
@@ -3087,7 +3096,10 @@
       "includeMCPConfigs": "Include MCP Configs",
       "includeAgentTools": "Include Agent Tools",
       "historyNotIncluded": "Conversation history is NOT exported. Only configuration is included."
-    }
+    },
+    "noSystemOneService": "No System One service",
+    "inoperative": "Inoperative",
+    "inoperativeDetail": "This agent has no System One service: choose one in its settings"
   },
   "scheduledTaskDetailPage": {
     "title": "Scheduled task details",
@@ -3959,7 +3971,11 @@
       "activeAppsHint": "{{agents}} agents · {{users}} users",
       "activeUsers": "Active users",
       "activeAgents_one": "{{formattedCount}} agent",
-      "activeAgents_other": "{{formattedCount}} agents"
+      "activeAgents_other": "{{formattedCount}} agents",
+      "systemOneTokens": "System One tokens",
+      "systemOneTokensPerExecution": "System One tokens / execution",
+      "systemOneTokensHint": "prompt tokens of the decision server",
+      "summarizationCalls": "Summarization calls"
     },
     "change": {
       "title": "Change vs the previous period",
@@ -4073,12 +4089,15 @@
     "title": {
       "ocr": "OCR Agent",
       "create": "Create Agent",
-      "edit": "Edit Agent"
+      "edit": "Edit Agent",
+      "systemOneCreate": "Create System One Agent",
+      "systemOneEdit": "Edit System One Agent"
     },
     "description": {
       "ocr": "Configure OCR agent for document processing",
       "create": "Configure a new AI agent with advanced capabilities",
-      "edit": "Modify agent: {{name}}"
+      "edit": "Modify agent: {{name}}",
+      "systemOne": "Classify, judge or decide over a text with fixed questions"
     },
     "loading": "Loading agent...",
     "cancel": "Cancel",
@@ -4104,7 +4123,8 @@
       "advanced": "Advanced",
       "marketplace": "Marketplace",
       "metrics": "Metrics",
-      "saveBeforeA2a": "Save the agent first to configure A2A settings"
+      "saveBeforeA2a": "Save the agent first to configure A2A settings",
+      "systemOne": "System One"
     },
     "fields": {
       "name": "Name",
@@ -4113,7 +4133,9 @@
       "aiAgent": "AI Agent",
       "ocrAgent": "OCR Agent",
       "description": "Description",
-      "descriptionPlaceholder": "Description..."
+      "descriptionPlaceholder": "Description...",
+      "systemOneAgent": "System One Agent",
+      "typeLocked": "The type of an existing agent cannot be changed."
     },
     "prompts": {
       "title": "Prompts & Instructions",
@@ -5231,6 +5253,229 @@
       "conversationBusy": "This conversation is still answering a previous message. Wait for it to finish and try again. Your message was kept in the box.",
       "stepLimitReached": "The assistant ran out of steps before finishing. Your conversation and any files created so far were kept: write \"continue\" to let it carry on.",
       "tooManyFiles": "Too many files in one message. Send fewer files at a time."
+    }
+  },
+  "systemOne": {
+    "status": {
+      "checking": "Checking...",
+      "connected": "Connected",
+      "unverifiable": "Not verifiable",
+      "tokenRejected": "Token rejected",
+      "unreachable": "Unreachable",
+      "modelRequired": "Model required",
+      "cannotReach": "Cannot reach the server"
+    },
+    "agentStatus": {
+      "inoperative": "Inoperative",
+      "inoperativeDetail": "This agent has no System One service: choose one in its settings"
+    },
+    "validation": {
+      "nameRequired": "The name is required",
+      "selectService": "Select a System One service",
+      "moreProblems_one": "{{first}} (and {{count}} more problem)",
+      "moreProblems_other": "{{first}} (and {{count}} more problems)",
+      "maxStateChars": "The maximum text length must be a whole number of at least {{min}}",
+      "optionsAtLeast": "It needs at least {{min}} options",
+      "optionsBetween": "It needs between {{min}} and {{max}} options",
+      "levelsAtLeast": "It needs at least {{min}} levels",
+      "levelsBetween": "It needs between {{min}} and {{max}} levels",
+      "thresholdRange": "The threshold must be a number between 0 and 1",
+      "optionNameRequired": "Every option needs a name",
+      "optionRepeated": "The option \"{{key}}\" is repeated (names are compared ignoring case)",
+      "minProbabilityRange": "The minimum probability must be a number between 0 and 1",
+      "levelDescriptionRequired": "Every level needs a description",
+      "addAtLeastOne": "Add at least one question",
+      "maxQuestions": "This server accepts at most {{max}} questions per call",
+      "keyFormat": "The key must be 1-{{max}} characters of lowercase letters, digits or underscores (e.g. is_urgent)",
+      "keyRepeated": "The key \"{{key}}\" is used by another question",
+      "instructionsRequired": "The instructions are required",
+      "questionTooLong": "This question's definition (instructions plus options/levels) is about {{size}} characters long. Each prompt has {{total}} characters in total, shared with the text to evaluate, and the text needs at least {{room}} (\"Maximum text length\" in this form): shorten the question or raise that limit",
+      "concurrency": "The server accepts {{limit}} requests at once: a cap of {{value}} can never be used",
+      "textLengthHint": "This server accepts {{tokens}} tokens per prompt, about {{chars}} characters of ordinary text: a longer text may be shortened by the server's limit."
+    },
+    "section": {
+      "description": "Answers closed questions about a text with probabilities. Images only work if the service's provider accepts them.",
+      "noServices": "This app has no System One service yet.",
+      "createInSettings": "Create one in Settings",
+      "comeBack": "and come back.",
+      "serviceLabel": "System One service *",
+      "selectService": "Select a service...",
+      "serviceMissing": "No service selected (it may have been deleted): this agent cannot evaluate anything until you choose one.",
+      "summarizerLabel": "Summarization LLM",
+      "optional": "(optional)",
+      "summarizerNone": "None: truncate long texts",
+      "summarizerHelp": "Used to shorten a text that does not fit. Without it the text is cut. The result always says which happened.",
+      "maxCharsLabel": "Maximum text length (characters)",
+      "maxCharsHint": "At least 500. The model works best with shorter texts (around 6000).",
+      "useAsTool": "Use as a tool",
+      "useAsToolHelp": "Other agents can call it to classify, judge or decide over a text."
+    },
+    "questions": {
+      "title": "Questions",
+      "help": "The agent answers all of them for every text. Keys and option names are part of what the model reads: make them descriptive. The order only decides how they are listed; each question is answered on its own. Drag a question by its handle, or use its arrows, to reorder.",
+      "questionN": "Question {{n}}",
+      "dragTitle": "Drag to reorder",
+      "moved": "Question moved to position {{position}} of {{total}}",
+      "typeYesNo": "Yes / No",
+      "typeChoice": "Choice",
+      "typeScore": "Score",
+      "exampleYesNo": "Is this message urgent?",
+      "exampleChoice": "Which department should handle this?",
+      "exampleScore": "How angry is the customer?",
+      "levelExample0": "Calm",
+      "levelExample1": "Annoyed",
+      "levelExample2": "Angry",
+      "levelExample3": "Furious",
+      "key": "Key",
+      "type": "Type",
+      "instructions": "Instructions",
+      "moveUp": "Move question {{n}} up",
+      "moveDown": "Move question {{n}} down",
+      "remove": "Remove question {{n}}",
+      "yesMeans": "Yes means",
+      "noMeans": "No means",
+      "optional": "(optional)",
+      "yesPlaceholder": "Needs an answer today",
+      "noPlaceholder": "Can wait",
+      "threshold": "Threshold for \"yes\"",
+      "thresholdHelp": "Empty = 0.5. \"Yes\" when the probability reaches it.",
+      "noulHelp": "Yes / No means: what each answer stands for. Fill one, both or none; a missing one stays plain \"Yes\" / \"No\".",
+      "options": "Options ({{range}})",
+      "rangeOrMore": "{{min}} or more",
+      "colorChosen": "Chosen color",
+      "colorAutomatic": "Automatic color (by name): click to choose another",
+      "optionColor": "Option {{n}} color",
+      "optionAutoColor": "Option {{n}}: back to the automatic color",
+      "auto": "auto",
+      "optionName": "Option {{n}} name",
+      "optionDescription": "Option {{n}} description",
+      "optionNamePlaceholder": "billing",
+      "optionDescriptionPlaceholder": "Invoices, payments, refunds",
+      "removeOption": "Remove option {{n}}",
+      "addOption": "Add option",
+      "levels": "Levels, from lowest to highest ({{range}})",
+      "levelDescription": "Level {{n}} description",
+      "levelFallback": "Level {{n}}",
+      "removeLevel": "Remove level {{n}}",
+      "addLevel": "Add level",
+      "colorsLegend": "Colors in the playground (the dot next to each level shows its color)",
+      "colorGreenFirst": "First level green (ascending)",
+      "colorRedFirst": "First level red (descending)",
+      "minProbability": "Minimum probability",
+      "minProbabilityPlaceholder": "no minimum",
+      "minProbabilityHelp": "Below this probability the decision is left empty. Empty field = always decide.",
+      "addYesNo": "Yes / No question",
+      "addChoice": "Choice question",
+      "addScore": "Score question"
+    },
+    "playground": {
+      "descriptionWithImages": "Paste a text (or attach documents and images) and see the answer to each question.",
+      "descriptionTextOnly": "Paste a text (or attach documents) and see the answer to each question. Text only.",
+      "textLabel": "Text to evaluate",
+      "textPlaceholder": "Hi, the router has not worked since yesterday and we have an event tomorrow...",
+      "attachDocuments": "Attach documents",
+      "removeFile": "Remove {{name}}",
+      "evaluate": "Evaluate",
+      "evaluating": "Evaluating...",
+      "summarizing": "Summarizing...",
+      "summarizingStatus": "Summarizing the text before evaluating it...",
+      "summarizingNote": "The text is longer than the room each question leaves, so the agent's LLM condenses it first. This can take up to a minute.",
+      "slowNote": "This is taking longer than usual: long texts are condensed with the agent's LLM first.",
+      "askingServer": "Asking the System One server.",
+      "latestResult": "Latest result",
+      "result": "Result",
+      "model": "Model {{model}}",
+      "inputTokens_one": "{{count}} input token",
+      "inputTokens_other": "{{count}} input tokens",
+      "timingsFull": "summarization {{summarization}} + evaluation {{evaluation}}",
+      "timingsEvaluation": "evaluation {{evaluation}}",
+      "previous": "Previous evaluations ({{count}})",
+      "yes": "Yes",
+      "no": "No",
+      "undetermined": "Undetermined",
+      "yesThreshold": "Yes (threshold {{threshold}})",
+      "probabilityAria": "{{label}} probability",
+      "expectedLevel": "Expected level {{value}}",
+      "confidence": "Confidence {{value}}",
+      "confidenceHint": "How concentrated the whole distribution is. It is not the accuracy of the answer, and it can be low even when the chosen option is clearly the best.",
+      "belowMinimum": "below the minimum probability ({{value}})",
+      "summarizedNotice": "The text was summarized before evaluating ({{original}} → {{used}} characters). The decisions are based on its summary.",
+      "truncatedNotice": "The text was truncated before evaluating ({{original}} → {{used}} characters). The decisions are based on its first part.",
+      "viewSummary": "View the summary",
+      "viewEvaluatedText": "View the text that was evaluated",
+      "imagesPngJpeg": "Only PNG and JPEG images are supported ({{files}})",
+      "imagesNotSupported": "This service evaluates text only: images are not supported ({{files}})",
+      "evaluationFailed": "The evaluation failed"
+    },
+    "wizard": {
+      "titleAdd": "Add System One service",
+      "titleEdit": "Edit System One service",
+      "stepConnection": "Connection",
+      "stepTest": "Test",
+      "limitConcurrent_one": "{{count}} concurrent request",
+      "limitConcurrent_other": "{{count}} concurrent requests",
+      "limitQuestions_one": "{{count}} question per call",
+      "limitQuestions_other": "{{count}} questions per call",
+      "limitTokens_one": "{{count}} token per question",
+      "limitTokens_other": "{{count}} tokens per question",
+      "connectTitle": "Connect a decision model",
+      "connectDescription": "It answers closed questions about a text with probabilities. These values are used to list the available models. They are not saved until you confirm the service in the last step.",
+      "serverUrl": "Server URL",
+      "serverUrlHelp": "Private addresses are allowed: a self-hosted server normally lives on a private network.",
+      "apiKey": "API key",
+      "tokenOptional": "Token (optional)",
+      "keepMasked": "Leave the masked value to keep the stored token; empty it to remove it.",
+      "tokenCleared": "The URL changed, so the stored token was cleared: type it again if the new server needs one.",
+      "chooseModel": "Choose a model",
+      "modelsOffered": "The models offered by {{endpoint}}.",
+      "listing": "Asking the server for its models...",
+      "couldNotList": "Could not list the models",
+      "noModels": "The server returned no models",
+      "typeIdentifier": "You can type the model identifier below if you know it.",
+      "modelIdentifier": "Model identifier",
+      "retry": "Retry",
+      "modelsGroup": "Models",
+      "testTitle": "Test and save",
+      "modelAtEndpoint": "<mono>{{model}}</mono> at <mono>{{endpoint}}</mono>",
+      "nameHelp": "Leave it empty to use the suggested name.",
+      "concurrencyLabel": "Maximum concurrent requests (in total)",
+      "concurrencyInvalid": "Enter a whole number of at least 1, or leave it empty",
+      "concurrencySuggested": "Suggested for this server: {{value}}.",
+      "concurrencyHelp": "The server accepts a limited number of requests at once and answers 529 above it. This is the total for all backend processes: they share it, so use the server's own limit.",
+      "serverLimits": "Server limits: {{limits}}",
+      "cannotListNote": "This server cannot list its models, so the test sends one small real question (a few tokens) to check the URL, the token and the model.",
+      "saving": "Saving...",
+      "modelNotOffered": "The server does not offer the model \"{{model}}\"",
+      "listFailed": "Failed to list the models",
+      "testFailed": "Failed to test the connection",
+      "saveFailed": "Failed to save the service"
+    },
+    "services": {
+      "title": "System One Services",
+      "subtitle": "Connections to System One servers used by System One agents",
+      "entity": "System One service",
+      "add": "Add System One Service",
+      "addFirst": "Add First System One Service",
+      "loading": "Loading System One services...",
+      "deleteWarning_one": "{{count}} agent uses this service and will stop working until you assign it another one.",
+      "deleteWarning_other": "{{count}} agents use this service and will stop working until you assign them another one.",
+      "colServer": "Server",
+      "colModel": "Model",
+      "colStatus": "Status",
+      "colAgents": "Agents",
+      "colConcurrency": "Concurrency",
+      "colCreated": "Created",
+      "colActions": "Actions",
+      "vision": "Vision",
+      "copy": "Copy",
+      "viewOnly": "View only",
+      "emptyTitle": "No System One Services",
+      "emptySubtitle": "Add a System One service to create agents that classify, judge or decide over a text.",
+      "aboutTitle": "About System One",
+      "aboutBody": "System One answers closed questions about a text (yes/no, pick a category, score on a scale) with probabilities, without generating text. It evaluates text; images are accepted only by the models marked Vision. Deleting a service does not delete its agents: they stay, but cannot run until you assign them another service.",
+      "testingMessage": "Testing connection to the System One server...",
+      "models": "Models",
+      "notAvailable": "N/A"
     }
   }
 }

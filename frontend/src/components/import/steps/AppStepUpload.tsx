@@ -40,6 +40,14 @@ function AppStepUpload({
           count: preview.component_counts.ai_services ?? 0,
         },
         {
+          key: 'systemOneServices',
+          icon: COMPONENT_TYPE_ICONS.system_one_service,
+          label: t('importModal.appUpload.components.systemOneServices', {
+            count: preview.component_counts.system_one_services ?? 0,
+          }),
+          count: preview.component_counts.system_one_services ?? 0,
+        },
+        {
           key: 'embeddingServices',
           icon: COMPONENT_TYPE_ICONS.embedding_service,
           label: t('importModal.appUpload.components.embeddingServices', {
