@@ -7,9 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Per-silo indexing settings**: every silo (and its repository, from the repository form) chooses its chunk size and overlap (200–8000 characters, overlap at most half; applied to every file type and to raw/crawled content) and its PDF loader with that loader's options. Loaders: `pymupdf` (fast, plain page text, ~0.01 s/page — the pre-0.5.1 behaviour) and `pymupdf4llm` (structured: Markdown in layout mode, reading order across columns, headings, tables, page headers/footers removed; chunks split by section with their section path as prefix and `page`/`total_pages`/`section` metadata; ~0.5 s/page; options `section_prefix` and `remove_headers_footers`). New silos default to 2000/400 with `pymupdf`; existing silos keep 1000/200 with `pymupdf` (migration `siloidx001`). Settings are part of silo create/update (internal and public API), silo/repository detail (with the loader catalog in `indexing_options`) and silo export/import (an unknown loader in an export falls back to defaults with a warning). Changing them only affects content indexed afterwards. New loaders are registered in `backend/tools/document_loaders/`.
+
+### Changed
+
+- **Structure-aware PDF loader of 0.5.1 replaced** by the `pymupdf4llm` loader above; it produced chunks without overlap, up to several times the chunk size, and wrong section labels. If the layout parser fails on a PDF, that PDF is indexed with `pymupdf`; a missing `pymupdf4llm` install fails the indexing instead. Markdown table rows (also in `.md` files) are no longer dropped by the garbage-line filter.
+- **Dependencies**: PyMuPDF 1.27 → 2.1 (exact pin, together with the new `pymupdf4llm` 2.1); `onnxruntime` is pulled in for the layout model, which makes the backend image larger. PDF extraction still runs synchronously in the indexing request.
+
+### Fixed
+
+- **Editing a silo no longer changes its type**: the silo form always sent `type: CUSTOM`, so saving a domain, SharePoint or repository silo from the silos list silently turned it into a custom silo. The form now omits the type on update and the stored one is kept.
+
 ### Removed
 
 - **Library / client-project mode**: the frontend is no longer packaged or published as the `@lksnext/ai-core-tools-base` npm library. Removed `deploy/` (client-project scripts and template), the `build:lib` / `publish:npm` scripts and the library Vite/TypeScript build, `src/index.ts`, and the client-setup and plugin-development guides. The last published npm version (0.3.0) is left untouched. The frontend app shell `ExtensibleBaseApp` is now `AppRoot` and `LibraryConfig` is `AppConfig`; the extra-routes and navigation-merging extension points (`extraRoutes`, `NavigationMerger`) were removed.
+
+### Fixed
+
+- **Silo playground "neighbouring chunks"** always came back empty: the id from the query string was compared as a string against the integer `resource_id`/`media_id` stored on each chunk. A non-integer `source_id` now returns 400. Moving a file or media between folders in a Qdrant silo now also updates its chunks' folder metadata (same mismatch; PGVector was not affected).
 
 ## [0.5.1] - 2026-11-18
 

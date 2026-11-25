@@ -2,6 +2,7 @@ import { configService } from '../core/ConfigService';
 import { authService } from './auth';
 import { getCsrfToken } from './cookies';
 import type { HitlCancelResult, HitlDecision, HitlPendingApproval, StreamEvent } from '../types/streaming';
+import type { IndexingDetailFields, IndexingSettingsPayload } from '../types/indexing';
 import type {
   ChatActionResult,
   ChatConversation,
@@ -397,7 +398,7 @@ export interface VectorDbOption {
   label: string;
 }
 
-export interface Silo {
+export interface Silo extends IndexingDetailFields {
   silo_id: number;
   name: string;
   description?: string;
@@ -459,7 +460,7 @@ export interface Media {
   folder_id: number | null;
 }
 
-export interface Repository {
+export interface Repository extends IndexingDetailFields {
   lifecycle_warnings?: ServiceLifecycleWarning[];
   repository_id: number;
   name: string;
@@ -2223,14 +2224,14 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/silos/0`);
   }
 
-  async createSilo(appId: number, data: { name: string; description?: string; embedding_service_id?: number; vector_db_type?: string; fixed_metadata?: boolean; transcription_service_id?: number | null; video_ai_service_id?: number | null }): Promise<Silo> {
+  async createSilo(appId: number, data: { name: string; description?: string; embedding_service_id?: number; vector_db_type?: string; fixed_metadata?: boolean; transcription_service_id?: number | null; video_ai_service_id?: number | null } & IndexingSettingsPayload): Promise<Silo> {
     return this.request(`/internal/apps/${appId}/silos/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateSilo(appId: number, siloId: number, data: { name: string; description?: string; fixed_metadata?: boolean; status?: string; transcription_service_id?: number | null; video_ai_service_id?: number | null }): Promise<Silo> {
+  async updateSilo(appId: number, siloId: number, data: { name: string; description?: string; fixed_metadata?: boolean; status?: string; transcription_service_id?: number | null; video_ai_service_id?: number | null } & IndexingSettingsPayload): Promise<Silo> {
     return this.request(`/internal/apps/${appId}/silos/${siloId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -2437,14 +2438,14 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`);
   }
 
-  async createRepository(appId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string; transcription_service_id?: number; video_ai_service_id?: number }): Promise<Repository> {
+  async createRepository(appId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string; transcription_service_id?: number; video_ai_service_id?: number } & IndexingSettingsPayload): Promise<Repository> {
     return this.request(`/internal/apps/${appId}/repositories/`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updateRepository(appId: number, repositoryId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string; transcription_service_id?: number; video_ai_service_id?: number }): Promise<Repository> {
+  async updateRepository(appId: number, repositoryId: number, data: { name: string; embedding_service_id?: number; vector_db_type?: string; transcription_service_id?: number; video_ai_service_id?: number } & IndexingSettingsPayload): Promise<Repository> {
     return this.request(`/internal/apps/${appId}/repositories/${repositoryId}`, {
       method: 'PUT',
       body: JSON.stringify(data),

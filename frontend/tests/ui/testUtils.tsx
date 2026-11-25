@@ -133,3 +133,8 @@ export function composerDescription(): string {
 
 /** Name of the dismiss button of the indexing notice (stacked alerts carry their own name after "Dismiss"). */
 export const dismissName = tr('alert.dismissNamed', { name: tr('appChat.attachmentIndexing.title') });
+
+/** Pattern matching the translated text of ``key`` anywhere (e.g. a label followed by a required marker). */
+export function trPattern(key: string): RegExp {
+  return new RegExp(tr(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+}

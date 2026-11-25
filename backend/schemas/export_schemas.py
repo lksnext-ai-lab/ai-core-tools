@@ -103,6 +103,11 @@ class ExportSiloSchema(BaseModel):
     metadata_definition_name: Optional[str] = None  # Reference to OutputParser
     fixed_metadata: bool = False
     description: Optional[str] = None
+    # Indexing settings (absent in exports made before they existed -> defaults on import)
+    chunk_size: Optional[int] = None
+    chunk_overlap: Optional[int] = None
+    pdf_loader: Optional[str] = None
+    pdf_loader_options: Optional[Dict[str, Any]] = None
     # Exclude: vectors, embeddings (heavy data), collection_name (auto-generated)
 
 

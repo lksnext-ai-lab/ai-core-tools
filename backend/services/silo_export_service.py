@@ -84,6 +84,10 @@ class SiloExportService(BaseExportService):
             metadata_definition_name=metadata_definition_name,
             fixed_metadata=silo.fixed_metadata,
             description=silo.description,
+            chunk_size=silo.chunk_size,
+            chunk_overlap=silo.chunk_overlap,
+            pdf_loader=silo.pdf_loader,
+            pdf_loader_options=silo.pdf_loader_options,
         )
 
         # Optionally bundle dependencies for portability

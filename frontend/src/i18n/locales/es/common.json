@@ -3328,6 +3328,41 @@
       "noVideoAnalysis": "Ninguno (sin análisis visual)",
       "videoAnalysisHelp": "Opcional. Añade una descripción del contenido visual a cada segmento transcrito."
     },
+    "indexing": {
+      "title": "Indexación",
+      "chunkSize": "Tamaño de fragmento (caracteres)",
+      "chunkSizeHelp": "Longitud máxima de cada fragmento indexado, entre {{min}} y {{max}}. Los fragmentos grandes dan más contexto por resultado; con modelos de embedding limitados a 512 tokens, no pases de unos 2000.",
+      "chunkOverlap": "Solapamiento entre fragmentos (caracteres)",
+      "chunkOverlapHelp": "Texto que se repite entre fragmentos consecutivos para no cortar una idea por la mitad. Como máximo, la mitad del tamaño del fragmento.",
+      "pdfLoader": "Loader de PDF",
+      "pdfLoaders": {
+        "pymupdf": {
+          "label": "Rápido (PyMuPDF)",
+          "description": "Texto plano de cada página, unos 0,01 s por página. Los fragmentos no cruzan páginas ni llevan información de sección."
+        },
+        "pymupdf4llm": {
+          "label": "Estructurado (pymupdf4llm)",
+          "description": "Conserva títulos, tablas y el orden de lectura de las páginas a varias columnas, y etiqueta cada fragmento con su sección. Unos 0,5 s por página."
+        }
+      },
+      "loaderOptions": {
+        "section_prefix": {
+          "label": "Añadir la sección a cada fragmento",
+          "help": "Empieza cada fragmento con su ruta de secciones, por ejemplo [1 Plan > 1.2 Fases], para que la búsqueda tenga en cuenta también el título."
+        },
+        "remove_headers_footers": {
+          "label": "Quitar cabeceras y pies de página",
+          "help": "Elimina el texto que se repite arriba y abajo de cada página."
+        }
+      },
+      "appliesToNewContentRepository": "Los cambios se aplican a los documentos que se suban o reindexen a partir de ahora. Los ya indexados conservan sus fragmentos hasta que los reindexes.",
+      "appliesToNewContentSilo": "Los cambios se aplican al contenido que se indexe a partir de ahora. El contenido ya indexado conserva sus fragmentos hasta que se vuelva a indexar.",
+      "validation": {
+        "chunkSizeRange": "Introduce un número entero entre {{min}} y {{max}}.",
+        "chunkOverlapRange": "Introduce un número entero entre 0 y {{max}}.",
+        "invalid": "Revisa los ajustes de indexación."
+      }
+    },
     "about": {
       "title": "Acerca de los silos personalizados",
       "description": "Los silos personalizados son contenedores de almacenamiento vectorial que permiten buscar y recuperar información semánticamente. Guardan embeddings de documentos para que los agentes de IA encuentren información relevante con rapidez.",
