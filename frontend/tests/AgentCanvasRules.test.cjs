@@ -47,7 +47,7 @@ test('refuses connecting anything from a read-only viewer', () => {
 
 test('refuses a piece kind the port does not accept', () => {
   const result = canConnect({ ...base, port: visionPort, kind: 'skill' });
-  assert.deepEqual(plain(result), { ok: false, reason: { key: 'agentCanvas.rules.wrongPort', params: { kind: 'skill', port: 'vision', portLabel: 'Vision' } } });
+  assert.deepEqual(plain(result), { ok: false, reason: { key: 'agentCanvas.rules.wrongPort', params: { kind: 'skill', port: 'vision' } } });
 });
 
 test('refuses an agent that would use itself as a tool', () => {

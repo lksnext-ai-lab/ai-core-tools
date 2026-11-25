@@ -24,7 +24,7 @@ export interface RuleContext {
 /**
  * A user-facing message as an i18n key plus its values; the UI translates it.
  * A `kind` param holds a PieceKind and a `port` param a PortId: the UI turns
- * them into the translated phrase / port label (`portLabel` is the English fallback).
+ * them into the translated phrase / port label.
  */
 export interface CanvasMessage {
   readonly key: string;
@@ -34,9 +34,9 @@ export interface CanvasMessage {
 export type RuleResult = { ok: true; warning?: CanvasMessage } | { ok: false; reason: CanvasMessage };
 
 /** Every piece kind, e.g. to validate drag payloads. */
-export const PIECE_KINDS: readonly PieceKind[] = [
+export const PIECE_KINDS = [
   'ai_service', 'embedding', 'sandbox', 'silo', 'skill', 'mcp', 'agent', 'parser', 'middleware',
-];
+] as const;
 
 const READ_ONLY: CanvasMessage = { key: 'agentCanvas.rules.readOnly' };
 
@@ -63,7 +63,7 @@ export function canConnect(ctx: RuleContext): RuleResult {
   if (!ctx.port.accepts.includes(ctx.kind)) {
     return {
       ok: false,
-      reason: { key: 'agentCanvas.rules.wrongPort', params: { kind: ctx.kind, port: ctx.port.id, portLabel: ctx.port.label } },
+      reason: { key: 'agentCanvas.rules.wrongPort', params: { kind: ctx.kind, port: ctx.port.id } },
     };
   }
   if (ctx.port.id === 'video' && ctx.kind === 'ai_service' && ctx.supportsVideo !== true) {

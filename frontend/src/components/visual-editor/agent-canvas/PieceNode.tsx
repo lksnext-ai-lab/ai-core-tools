@@ -28,9 +28,9 @@ export function PieceNode({ data, isConnectable }: NodeProps<CanvasFlowNode>) {
           {piece.name}
         </p>
         <p className="truncate text-xs text-fg-secondary dark:text-fg-secondary-dark">{t(visual.typeCaptionKey)}</p>
-        {data.portLabels && data.portLabels.length > 0 && (
+        {data.portIds && data.portIds.length > 0 && (
           <p className="truncate text-[11px] text-fg-tertiary dark:text-fg-tertiary-dark">
-            {data.portLabels.join(', ')}
+            {data.portIds.map((id) => t(`agentCanvas.ports.${id}`)).join(', ')}
           </p>
         )}
         {data.loose && (

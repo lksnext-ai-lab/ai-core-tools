@@ -193,7 +193,6 @@ export function buildFlowNodes(
       position: savedPositions[`agent:${agent.agent_id}`] ?? { x: 0, y: 0 },
       data: {
         label: agent.name,
-        typeCaption: agentType === 'ocr_agent' ? 'OCR agent' : 'Agent',
         typeCaptionKey: agentType === 'ocr_agent' ? 'agentCanvas.kinds.ocrAgent' : 'agentCanvas.kinds.agent',
         ports: ports.filter((port) => !port.secondary),
         secondaryPorts: ports.filter((port) => port.secondary),
@@ -211,25 +210,24 @@ export function buildFlowNodes(
     (a, b) => (portOrder.get(a.port) ?? 0) - (portOrder.get(b.port) ?? 0) || a.id - b.id,
   );
   // One card per piece even when it feeds several ports (e.g. one AI service
-  // on Model and Transcription); the port labels aggregate in port order.
+  // on Model and Transcription); the port ids aggregate in port order.
   const portById = new Map(ports.map((port) => [port.id, port]));
-  const deduped: Array<{ nodeId: string; piece: CanvasPiece; portLabels: string[]; primaryFed: boolean }> = [];
+  const deduped: Array<{ nodeId: string; piece: CanvasPiece; portIds: PortId[]; primaryFed: boolean }> = [];
   const dedupeIndex = new Map<string, number>();
   for (const entry of ordered) {
     const piece = byPieceId.get(`${entry.kind}:${entry.id}`);
     if (!piece) continue;
     const nodeId = `${entry.kind}:${entry.id}`;
-    const label = ports[portOrder.get(entry.port) ?? 0].label;
     // The card sits on the side of the ports it feeds (primary wins when both).
     const primaryFed = portById.get(entry.port)?.secondary !== true;
     const seenAt = dedupeIndex.get(nodeId);
     if (seenAt !== undefined) {
-      deduped[seenAt].portLabels.push(label);
+      deduped[seenAt].portIds.push(entry.port);
       deduped[seenAt].primaryFed ||= primaryFed;
       continue;
     }
     dedupeIndex.set(nodeId, deduped.length);
-    deduped.push({ nodeId, piece, portLabels: [label], primaryFed });
+    deduped.push({ nodeId, piece, portIds: [entry.port], primaryFed });
   }
   const placeGroup = (group: typeof deduped, x: number) =>
     group.forEach((entry, index) => {
@@ -242,7 +240,7 @@ export function buildFlowNodes(
           // (localStorage) can't leave secondary pieces left of the agent.
           y: savedPositions[entry.nodeId]?.y ?? (index - (group.length - 1) / 2) * PIECE_ROW_HEIGHT,
         },
-        data: { label: entry.piece.name, piece: entry.piece, portLabels: entry.portLabels },
+        data: { label: entry.piece.name, piece: entry.piece, portIds: entry.portIds },
         // Deletable only to disconnect: handleBeforeDelete maps the card to its
         // agent edges and never returns it as a removed node.
         deletable: canEdit,
@@ -433,7 +431,7 @@ function PortChooser({ name, ports, onPick, onCancel }: PortChooserProps) {
             onClick={() => onPick(port)}
             className="rounded-md px-3 py-1.5 text-left text-sm text-fg transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:text-fg-dark dark:hover:bg-btCard-hover"
           >
-            {t(`agentCanvas.ports.${port.id}`, { defaultValue: port.label })}
+            {t(`agentCanvas.ports.${port.id}`)}
           </button>
         ))}
       </div>
@@ -477,11 +475,11 @@ export function AgentCanvas({ appId, agentId, canEdit, canCreateShared = false, 
   /** Translates a rule / save-plan message; `kind` and `port` params become the translated phrase and port label. */
   const formatMessage = useCallback(
     (message: CanvasMessage): string => {
-      const { kind, port, portLabel, ...rest } = message.params ?? {};
+      const { kind, port, ...rest } = message.params ?? {};
       return t(message.key, {
         ...rest,
         ...(kind ? { kind: t(`agentCanvas.phrases.${kind}`) } : {}),
-        ...(port ? { port: t(`agentCanvas.ports.${port}`, { defaultValue: portLabel ?? port }) } : {}),
+        ...(port ? { port: t(`agentCanvas.ports.${port}`) } : {}),
       });
     },
     [t],

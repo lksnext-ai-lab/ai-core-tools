@@ -1,8 +1,8 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import { KindIcon } from './KindIcon';
-import { NODE_KIND_VISUALS, PIECE_VISUALS } from '../nodeKindConfig';
-import type { PieceKind, PortDef } from './agentPorts';
+import { PIECE_VISUALS } from '../nodeKindConfig';
+import type { PieceKind, PortDef, PortId } from './agentPorts';
 import type { CanvasPiece } from './useAgentCanvasData';
 
 /**
@@ -12,9 +12,7 @@ import type { CanvasPiece } from './useAgentCanvasData';
  */
 export interface CanvasNodeData extends Record<string, unknown> {
   readonly label: string;
-  /** Caption under the label ("Agent" / "OCR agent"; piece cards use the kind caption). */
-  readonly typeCaption?: string;
-  /** i18n key (agentCanvas.kinds.*) for the caption; wins over `typeCaption` when set. */
+  /** i18n key (agentCanvas.kinds.*) for the caption under the label; defaults to the agent kind's. */
   readonly typeCaptionKey?: string;
   /** Agent body only: primary port rows, in `portsFor` order. */
   readonly ports?: readonly PortDef[];
@@ -28,8 +26,8 @@ export interface CanvasNodeData extends Record<string, unknown> {
   readonly draggingSupportsVideo?: boolean;
   /** Piece cards only: the connected piece. */
   readonly piece?: CanvasPiece;
-  /** Piece cards only: labels of the ports the piece feeds, in port order (one card per piece even when it connects to several ports). */
-  readonly portLabels?: readonly string[];
+  /** Piece cards only: ids of the ports the piece feeds, in port order (one card per piece even when it connects to several ports). */
+  readonly portIds?: readonly PortId[];
   /** Piece cards only: on the canvas but not connected to any port yet. */
   readonly loose?: boolean;
 }
@@ -52,7 +50,7 @@ function PortRow({
 }) {
   const { t } = useTranslation('common');
   const isRight = side === 'right';
-  const portLabel = t(`agentCanvas.ports.${port.id}`, { defaultValue: port.label });
+  const portLabel = t(`agentCanvas.ports.${port.id}`);
   const isTools = port.id === 'tools';
   // The bullet is painted with the accent color(s) of the piece kinds it takes,
   // so users can match a piece to its port at a glance. Tools is deliberately
@@ -103,7 +101,7 @@ function PortRow({
  */
 export function AgentPortNode({ data, isConnectable }: NodeProps<CanvasFlowNode>) {
   const { t } = useTranslation('common');
-  const visual = NODE_KIND_VISUALS.agent;
+  const visual = PIECE_VISUALS.agent;
   const ports = data.ports ?? [];
   const secondary = data.secondaryPorts ?? [];
   const isTool = data.isTool === true;
@@ -139,7 +137,7 @@ export function AgentPortNode({ data, isConnectable }: NodeProps<CanvasFlowNode>
             {data.label}
           </p>
           <p className="truncate text-xs text-fg-secondary dark:text-fg-secondary-dark">
-            {t(data.typeCaptionKey ?? visual.typeCaptionKey, { defaultValue: data.typeCaption ?? visual.typeCaption })}
+            {t(data.typeCaptionKey ?? visual.typeCaptionKey)}
           </p>
         </div>
       </div>

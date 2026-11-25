@@ -4,16 +4,9 @@
  * and how drops and edge mutations translate into agent payload fields.
  */
 
-export type PieceKind =
-  | 'ai_service'
-  | 'embedding'
-  | 'sandbox'
-  | 'silo'
-  | 'skill'
-  | 'mcp'
-  | 'agent'
-  | 'parser'
-  | 'middleware';
+import type { PIECE_KINDS } from './connectionRules';
+
+export type PieceKind = (typeof PIECE_KINDS)[number];
 
 export type PortId =
   | 'model'
@@ -49,7 +42,6 @@ export interface AgentLinks {
 /** One connection port on the agent body. */
 export interface PortDef {
   readonly id: PortId;
-  readonly label: string;
   readonly accepts: readonly PieceKind[];
   readonly multiple: boolean;
   /** Agent field this port connects through (`tools` picks between two fields by kind). */
@@ -59,22 +51,22 @@ export interface PortDef {
 }
 
 export const AGENT_PORTS: readonly PortDef[] = [
-  { id: 'model', label: 'Model', accepts: ['ai_service'], multiple: false, field: 'service_id' },
-  { id: 'knowledge', label: 'Knowledge', accepts: ['silo'], multiple: false, field: 'silo_id' },
-  { id: 'skills', label: 'Skills', accepts: ['skill'], multiple: true, field: 'skill_ids' },
-  { id: 'tools', label: 'Tools', accepts: ['mcp', 'agent'], multiple: true, field: 'mcp_config_ids', secondary: true },
-  { id: 'output', label: 'Output', accepts: ['parser'], multiple: false, field: 'output_parser_id', secondary: true },
-  { id: 'middlewares', label: 'Middlewares', accepts: ['middleware'], multiple: true, field: 'middleware_ids', secondary: true },
-  { id: 'sandbox', label: 'Sandbox', accepts: ['sandbox'], multiple: false, field: 'sandbox_service_id', secondary: true },
-  { id: 'transcription', label: 'Transcription', accepts: ['ai_service'], multiple: false, field: 'transcription_service_id' },
-  { id: 'video', label: 'Video', accepts: ['ai_service'], multiple: false, field: 'video_ai_service_id' },
-  { id: 'media_embedding', label: 'Media embedding', accepts: ['embedding'], multiple: false, field: 'media_embedding_service_id', secondary: true },
+  { id: 'model', accepts: ['ai_service'], multiple: false, field: 'service_id' },
+  { id: 'knowledge', accepts: ['silo'], multiple: false, field: 'silo_id' },
+  { id: 'skills', accepts: ['skill'], multiple: true, field: 'skill_ids' },
+  { id: 'tools', accepts: ['mcp', 'agent'], multiple: true, field: 'mcp_config_ids', secondary: true },
+  { id: 'output', accepts: ['parser'], multiple: false, field: 'output_parser_id', secondary: true },
+  { id: 'middlewares', accepts: ['middleware'], multiple: true, field: 'middleware_ids', secondary: true },
+  { id: 'sandbox', accepts: ['sandbox'], multiple: false, field: 'sandbox_service_id', secondary: true },
+  { id: 'transcription', accepts: ['ai_service'], multiple: false, field: 'transcription_service_id' },
+  { id: 'video', accepts: ['ai_service'], multiple: false, field: 'video_ai_service_id' },
+  { id: 'media_embedding', accepts: ['embedding'], multiple: false, field: 'media_embedding_service_id', secondary: true },
 ];
 
 export const OCR_PORTS: readonly PortDef[] = [
-  { id: 'vision', label: 'Vision', accepts: ['ai_service'], multiple: false, field: 'vision_service_id' },
-  { id: 'text', label: 'Text', accepts: ['ai_service'], multiple: false, field: 'service_id' },
-  { id: 'output', label: 'Output', accepts: ['parser'], multiple: false, field: 'output_parser_id' },
+  { id: 'vision', accepts: ['ai_service'], multiple: false, field: 'vision_service_id' },
+  { id: 'text', accepts: ['ai_service'], multiple: false, field: 'service_id' },
+  { id: 'output', accepts: ['parser'], multiple: false, field: 'output_parser_id' },
 ];
 
 export function portsFor(type: AgentType): readonly PortDef[] {

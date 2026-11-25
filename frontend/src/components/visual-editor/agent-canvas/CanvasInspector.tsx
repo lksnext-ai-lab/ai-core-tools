@@ -699,7 +699,7 @@ export function CanvasInspector({
       ? [
           t('agentCanvas.inspector.connectedTo', {
             port: edgePort
-              ? t(`agentCanvas.ports.${edgePort.id}`, { defaultValue: edgePort.label })
+              ? t(`agentCanvas.ports.${edgePort.id}`)
               : t('agentCanvas.inspector.thisPort'),
           }),
           canEdit ? t('agentCanvas.inspector.disconnectHint') : '',

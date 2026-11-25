@@ -21,10 +21,6 @@ export function layoutKey(appId: number, agentId: number): string {
   return `mattin.agentCanvas.v1.${appId}.${agentId}`;
 }
 
-function emptyLayout(): CanvasLayout {
-  return { positions: {}, loose: [] };
-}
-
 /** Stored layout without entries for nodes the agent no longer has; malformed values are dropped. */
 export function loadLayout(
   storage: StorageLike | null,
@@ -32,40 +28,27 @@ export function loadLayout(
   agentId: number,
   knownNodeIds: ReadonlySet<string>,
 ): CanvasLayout {
-  if (!storage) return emptyLayout();
-  let raw: string | null;
+  let stored: unknown = null;
   try {
-    raw = storage.getItem(layoutKey(appId, agentId));
+    stored = JSON.parse(storage?.getItem(layoutKey(appId, agentId)) ?? 'null');
   } catch {
-    return emptyLayout();
+    // Storage blocked or invalid JSON: start from an empty layout.
   }
-  if (raw === null) return emptyLayout();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return emptyLayout();
-  }
-  if (parsed === null || typeof parsed !== 'object') return emptyLayout();
-  const stored = parsed as { positions?: unknown; loose?: unknown };
+  const { positions: rawPositions, loose: rawLoose } = (stored && typeof stored === 'object' ? stored : {}) as {
+    positions?: unknown;
+    loose?: unknown;
+  };
   const positions: Record<string, { x: number; y: number }> = {};
-  if (stored.positions && typeof stored.positions === 'object' && !Array.isArray(stored.positions)) {
-    for (const [id, value] of Object.entries(stored.positions)) {
-      if (!knownNodeIds.has(id)) continue;
-      const point = value as { x: unknown; y: unknown } | null;
-      if (
-        point &&
-        typeof point.x === 'number' &&
-        typeof point.y === 'number' &&
-        Number.isFinite(point.x) &&
-        Number.isFinite(point.y)
-      ) {
-        positions[id] = { x: point.x, y: point.y };
+  if (rawPositions && typeof rawPositions === 'object' && !Array.isArray(rawPositions)) {
+    for (const [id, value] of Object.entries(rawPositions)) {
+      const { x, y } = (value ?? {}) as { x?: unknown; y?: unknown };
+      if (knownNodeIds.has(id) && Number.isFinite(x) && Number.isFinite(y)) {
+        positions[id] = { x: x as number, y: y as number };
       }
     }
   }
-  const loose = Array.isArray(stored.loose)
-    ? stored.loose.filter((id): id is string => typeof id === 'string' && knownNodeIds.has(id))
+  const loose = Array.isArray(rawLoose)
+    ? rawLoose.filter((id): id is string => typeof id === 'string' && knownNodeIds.has(id))
     : [];
   return { positions, loose };
 }

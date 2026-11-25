@@ -27,19 +27,6 @@ test('exposes the agent and OCR port catalogs in canvas order', () => {
     'media_embedding',
   ]);
   assert.deepEqual(JSON.parse(JSON.stringify(OCR_PORTS.map((def) => def.id))), ['vision', 'text', 'output']);
-  assert.deepEqual(JSON.parse(JSON.stringify(portsFor('agent').map((def) => def.label))), [
-    'Model',
-    'Knowledge',
-    'Skills',
-    'Tools',
-    'Output',
-    'Middlewares',
-    'Sandbox',
-    'Transcription',
-    'Video',
-    'Media embedding',
-  ]);
-  assert.deepEqual(JSON.parse(JSON.stringify(portsFor('ocr_agent').map((def) => def.label))), ['Vision', 'Text', 'Output']);
   assert.deepEqual(JSON.parse(JSON.stringify(AGENT_PORTS.filter((def) => def.secondary).map((def) => def.id))), [
     'tools',
     'output',
