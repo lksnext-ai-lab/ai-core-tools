@@ -34,9 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Public API `/call` with human approval**: agents with a human-approval middleware no longer return `409` from `/chat/{agent_id}/call`; the response carries `status: "requires_approval"` and a `pending_approval` to answer through the new `/approvals/{approval_id}/decisions` endpoints. `/call` responses now always include `status`.
 - **Internal resume endpoint replaced**: `POST /internal/apps/{app}/agents/{agent}/chat/resume` is replaced by `POST /internal/approvals/{approval_id}/decisions/stream` (JSON decisions addressed by `action_id`) and `POST /internal/approvals/{approval_id}/cancel`.
+- **`VisualEditorPage` export removed**: the app-wide visual editor and its `/apps/:appId/visual-editor` route are gone; the visual editor is now per agent (`AgentFormPage` `?view=visual`).
 
 ### Added
 
+- **Per-agent visual editor**: build an agent by connecting services, knowledge, skills, MCP servers, other agents and more on a canvas (Form | Visual toggle on the agent page, quick create at `/apps/:appId/agents/new`).
 - **Service end of service**: AI, embedding and sandbox services accept an optional `end_of_service_at` date and `deprecation_notice`. Status (active / deprecated / retired) is computed at read time; retired services are blocked with `409 SERVICE_RETIRED` (a retired sandbox service disables the code interpreter for the turn instead). New "Used by" endpoints, bulk move of agents between AI services, `lifecycle_warnings` on agents/silos/repositories/scheduled tasks, setting `service_end_of_service_warning_days` (`AICT_SYSTEM_SERVICE_END_OF_SERVICE_WARNING_DAYS`) and migration `svceos001`. See `docs/guides/chat-bot/kb-ai-services.md`.
 - **Human approvals with expiry**: every human-in-the-loop pause is recorded with its owner and an expiry (`approval_timeout_seconds`, default 1 h). Unanswered approvals are rejected (never approved) by a background sweep, so conversations never stay paused. Answers are accepted once (compare-and-set) and only from the requester.
 - **Approvals in the marketplace chat**, with countdown, cancel and a locked composer while waiting; channels that cannot ask a person (MCP, scheduled tasks, OpenAI-compatible API, platform chatbot) reject the pause and return `409 approval_not_supported_in_channel`.

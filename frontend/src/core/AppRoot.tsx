@@ -20,6 +20,7 @@ import AppsPage from '../pages/AppsPage';
 import AppDashboard from '../pages/AppDashboard';
 import AgentsPage from '../pages/AgentsPage';
 import AgentFormPage from '../pages/AgentFormPage';
+import AgentCreatePage from '../pages/AgentCreatePage';
 import ScheduledTasksPage from '../pages/ScheduledTasksPage';
 import ScheduledTaskFormPage from '../pages/ScheduledTaskFormPage';
 import ScheduledTaskDetailPage from '../pages/ScheduledTaskDetailPage';
@@ -270,6 +271,12 @@ export const AppRoot: React.FC<AppRootProps> = ({ config }) => {
                 <Route path="/apps/:appId/agents" element={
                   <EditorLayoutRoute {...commonLayoutProps}>
                       <AgentsPage />
+                  </EditorLayoutRoute>
+                } />
+
+                <Route path="/apps/:appId/agents/new" element={
+                  <EditorLayoutRoute {...commonLayoutProps}>
+                      <AgentCreatePage />
                   </EditorLayoutRoute>
                 } />
 

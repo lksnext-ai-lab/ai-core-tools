@@ -4069,7 +4069,235 @@
     "apiKeyInstructions": "Callers must send an app API key in the X-API-KEY header. Create keys in the app's",
     "apiKeysSettings": "API Keys settings"
   },
+  "agentCanvas": {
+    "kinds": {
+      "agent": "Agent",
+      "ocrAgent": "OCR agent",
+      "service": "AI service",
+      "silo": "Silo",
+      "embedding": "Embedding",
+      "skill": "Skill",
+      "mcp": "MCP config",
+      "parser": "Output parser",
+      "sandbox": "Sandbox service",
+      "middleware": "Middleware"
+    },
+    "canvas": {
+      "loading": "Loading agent canvas…",
+      "tryAgain": "Try again",
+      "connectTo": "Connect {{name}} to:",
+      "alreadyConnected": "{{name}} is already connected",
+      "cannotConnect": "{{kind}} can't be connected to this agent",
+      "alreadyOnCanvas": "{{name}} is already on the canvas",
+      "resizePalette": "Resize pieces palette",
+      "resizeInspector": "Resize inspector",
+      "title": "Agent canvas"
+    },
+    "nodes": {
+      "notConnected": "Not connected",
+      "tool": "Tool"
+    },
+    "ports": {
+      "model": "Model",
+      "knowledge": "Knowledge",
+      "skills": "Skills",
+      "tools": "Tools",
+      "output": "Output",
+      "middlewares": "Middlewares",
+      "sandbox": "Sandbox",
+      "transcription": "Transcription",
+      "video": "Video",
+      "media_embedding": "Media embedding",
+      "vision": "Vision",
+      "text": "Text"
+    },
+    "inspector": {
+      "title": "Inspector",
+      "emptyHint": "Select the agent, a piece or a connection on the canvas to edit it here.",
+      "openFullEditor": "Open full editor",
+      "edit": "Edit",
+      "adminRequired": "Administrator role required",
+      "nameRequired": "Name is required",
+      "memoryNeedsMediaEmbedding": "Conversational agents need a media embedding service to index files uploaded in chat — connect one to the Media embedding port first",
+      "thresholdRequired": "Score threshold (0–1) is required before the threshold strategy can be saved",
+      "retrievalSettings": "Retrieval settings",
+      "knowledgeLabel": "Knowledge",
+      "connectedTo": "Connected to {{port}}.",
+      "thisPort": "this port",
+      "disconnectHint": "Press Delete or Backspace on the canvas to disconnect it.",
+      "fields": {
+        "name": "Name",
+        "description": "Description",
+        "visionPrompt": "Vision prompt",
+        "textPrompt": "Text prompt",
+        "systemPrompt": "System prompt",
+        "temperature": "Temperature",
+        "temperatureHelp": "0 = deterministic, 2 = very creative."
+      },
+      "toggles": {
+        "isTool": {
+          "label": "Tool agent",
+          "help": "Can be used by other agents"
+        },
+        "hasMemory": {
+          "label": "Conversational",
+          "help": "Maintains conversation memory"
+        },
+        "codeInterpreter": {
+          "label": "Code interpreter",
+          "help": "Allows the agent to execute Python code"
+        },
+        "skillRouter": {
+          "label": "Skill router",
+          "help": "Let the model pre-select at most 2 skills per turn"
+        }
+      },
+      "badges": {
+        "system": "System",
+        "tool": "Tool"
+      },
+      "info": {
+        "type": "Type",
+        "model": "Model",
+        "toolAgent": "Tool agent",
+        "tools": "Tools",
+        "requests": "Requests",
+        "lastUsed": "Last used",
+        "provider": "Provider",
+        "video": "Video",
+        "vectorDb": "Vector DB",
+        "documents": "Documents",
+        "transport": "Transport",
+        "fields": "Fields",
+        "description": "Description",
+        "noModel": "No model",
+        "yes": "Yes",
+        "no": "No",
+        "never": "Never",
+        "supported": "Supported",
+        "notSupported": "Not supported"
+      }
+    },
+    "palette": {
+      "ariaLabel": "Pieces palette",
+      "filter": "Filter pieces",
+      "expand": "Expand pieces palette",
+      "collapse": "Collapse pieces palette",
+      "create": "Create {{kind}}",
+      "none": "None yet",
+      "noMatches": "No pieces match this filter.",
+      "memoryComingSoon": "Memory — coming soon",
+      "systemBadge": "System",
+      "toolBadge": "Tool",
+      "connectTurnsTool": "Connecting it turns on Tool agent",
+      "categories": {
+        "ai_service": "AI services",
+        "silo": "Knowledge",
+        "skill": "Skills",
+        "mcp": "MCP servers",
+        "agent": "Agents",
+        "parser": "Output parsers",
+        "middleware": "Middlewares",
+        "sandbox": "Sandbox",
+        "embedding": "Embedding"
+      },
+      "singular": {
+        "ai_service": "AI service",
+        "silo": "silo",
+        "skill": "skill",
+        "mcp": "MCP server",
+        "agent": "agent",
+        "parser": "output parser",
+        "middleware": "middleware",
+        "sandbox": "sandbox service",
+        "embedding": "embedding service"
+      }
+    },
+    "createPiece": {
+      "title": {
+        "silo": "Create new silo",
+        "skill": "Create new skill",
+        "mcp": "Create new MCP config",
+        "parser": "Create new data structure",
+        "middleware": "Create new middleware",
+        "agent": "Create new agent"
+      },
+      "entity": {
+        "ai_service": "AI service",
+        "embedding": "embedding service",
+        "sandbox": "sandbox service",
+        "silo": "silo",
+        "skill": "skill",
+        "mcp": "MCP config",
+        "agent": "agent",
+        "parser": "data structure",
+        "middleware": "middleware"
+      },
+      "creating": "Creating {{entity}}…",
+      "created": "{{entity}} created",
+      "saveFailed": "Failed to save {{entity}}",
+      "loading": "Loading {{entity}}…",
+      "parserLoadFailed": "Failed to load parser options"
+    },
+    "editPiece": {
+      "title": {
+        "skill": "Edit skill",
+        "mcp": "Edit MCP config",
+        "middleware": "Edit middleware",
+        "parser": "Edit data structure",
+        "service": "Edit service"
+      },
+      "updating": "Updating {{entity}}…",
+      "updated": "{{entity}} updated",
+      "saveFailed": "Failed to save {{entity}}",
+      "loadFailed": "Failed to load {{entity}}",
+      "loading": "Loading {{entity}}…",
+      "failedToLoad": "Failed to load the {{entity}}."
+    },
+    "phrases": {
+      "ai_service": "An AI service",
+      "embedding": "An embedding service",
+      "sandbox": "A sandbox service",
+      "silo": "A silo",
+      "skill": "A skill",
+      "mcp": "An MCP server",
+      "agent": "An agent",
+      "parser": "An output parser",
+      "middleware": "A middleware"
+    },
+    "rules": {
+      "readOnly": "You don't have permission to edit this agent",
+      "wrongPort": "{{kind}} can't be connected to {{port}}",
+      "noVideo": "This AI service doesn't support video",
+      "selfTool": "An agent can't use itself as a tool",
+      "toolLoop": "This would create a loop: that agent already uses this one as a tool",
+      "retired": "This service is retired and can't be connected",
+      "deprecated": "This service is deprecated and will stop working soon",
+      "needsMediaEmbedding": "Conversational agents need a media embedding service. Turn off Conversational first."
+    },
+    "save": {
+      "nowTool": "{{name}} can now be used as a tool",
+      "codeInterpreterOn": "Code interpreter turned on to use {{name}}",
+      "replaced": "Replaced {{replaced}} with {{name}}",
+      "connected": "Connected {{name}}",
+      "dropHint": " — to use it for transcription or video, drop it on that port",
+      "connectionFailed": "Couldn't update the connection",
+      "agentFailed": "Couldn't update the agent",
+      "connectionUpdated": "Connection updated"
+    }
+  },
   "agentFormPage": {
+  "view": {
+    "label": "Editor view",
+    "form": "Form",
+    "visual": "Visual"
+  },
+  "unsaved": {
+    "title": "Unsaved changes",
+    "message": "Save your changes before opening the visual editor?",
+    "save": "Save and continue",
+    "discard": "Discard"
+  },
     "title": {
       "ocr": "OCR Agent",
       "create": "Create Agent",

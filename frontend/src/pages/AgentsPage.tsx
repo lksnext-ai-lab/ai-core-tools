@@ -114,11 +114,12 @@ function AgentsPage() {
   }, [loadData]);
 
   const handleCreateAgent = () => {
-    navigate(`/apps/${appId}/agents/0`);
+    navigate(`/apps/${appId}/agents/new`);
   };
 
+  // Editing an agent opens the visual editor directly; the form is one toggle away.
   const handleEditAgent = (agentId: number) => {
-    navigate(`/apps/${appId}/agents/${agentId}`);
+    navigate(`/apps/${appId}/agents/${agentId}?view=visual`);
   };
 
   const handlePlayground = (agentId: number) => {

@@ -1535,8 +1535,8 @@ class ApiService {
     return this.request(`/internal/apps/${appId}/sandbox-services/${serviceId}`);
   }
 
-  async createSandboxService(appId: number, data: any) {
-    return this.request(`/internal/apps/${appId}/sandbox-services/0`, {
+  async createSandboxService(appId: number, data: any): Promise<ExistingSandboxService> {
+    return this.request<ExistingSandboxService>(`/internal/apps/${appId}/sandbox-services/0`, {
       method: 'POST',
       body: JSON.stringify(data),
     });

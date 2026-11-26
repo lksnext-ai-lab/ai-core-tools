@@ -42,3 +42,16 @@ export function errorMessage(err: unknown, fallback: string): string {
   if (typeof err === 'string' && err) return err;
   return fallback;
 }
+
+/**
+ * First message of a FastAPI/Pydantic 422 `detail` array, without Pydantic's
+ * "Value error, " prefix. Null when `detail` is not such an array.
+ */
+export function validationDetailMessage(detail: unknown): string | null {
+  if (!Array.isArray(detail) || detail.length === 0) return null;
+  const first: unknown = detail[0];
+  if (typeof first !== 'object' || first === null) return null;
+  const msg = (first as { msg?: unknown }).msg;
+  if (typeof msg !== 'string') return null;
+  return msg.replace(/^Value error,\s*/i, '');
+}

@@ -82,6 +82,8 @@ class AgentService:
 
         # Dependency warnings: one lookup context for the whole list, never per agent.
         lifecycle_ctx = ServiceLifecycleService.build_context(db, app_id, all_agents=True)
+        # One query for every agent's tool ids (a per-agent lazy load would be N+1).
+        tool_edges = AgentRepository.get_tool_edges_by_app_id(db, app_id)
 
         result = []
         for agent in agents:
@@ -107,6 +109,7 @@ class AgentService:
                     else None
                 ),
                 a2a_enabled=bool(_typed_attr(agent, 'a2a_enabled', bool, False)),
+                tool_ids=tool_edges.get(agent.agent_id, []),
                 lifecycle_warnings=ServiceLifecycleService.warnings_for_agent(
                     lifecycle_ctx.agent_refs.get(agent.agent_id), lifecycle_ctx
                 ),
@@ -1119,6 +1122,53 @@ class AgentService:
         if MiddlewareType.HUMAN_IN_THE_LOOP in seen_types and not has_memory:
             raise ValueError("Human-in-the-loop middlewares require conversation memory to be enabled")
         return ordered_ids
+
+    @staticmethod
+    def validate_tool_selection(db: Session, app_id: int, agent_id: int, tool_ids: list) -> list:
+        """Validate an agent's tool selection and return the de-duplicated, filtered ids.
+
+        Only ids that are NEW for the agent (not already in its stored tool associations)
+        are checked. Self-reference is always rejected. A new id that is not a tool agent of
+        the app is silently dropped (as before: another app's agents are never attached),
+        and one that would create a tool cycle raises ValueError (e.g. via the agent canvas
+        graph). Already-attached ids are never rejected: legacy data
+        can hold them (a tool agent later had ``is_tool`` turned off, or a cycle predates
+        this check), and the form re-sends the whole list. An already-attached id that is
+        no longer a valid tool agent of the app is silently dropped from the result, and
+        an existing cycle is not re-checked. A new agent (``agent_id=0``) has no stored
+        tools, so every id is new and the cycle check is skipped for it.
+
+        Returns:
+            The de-duplicated ids in submitted order, excluding stale existing ids.
+        """
+        deduped = list(dict.fromkeys(int(id) for id in tool_ids if id))
+        if not deduped:
+            return []
+        if agent_id in deduped:
+            raise ValueError("An agent cannot use itself as a tool")
+        current_ids = set()
+        if agent_id:
+            current_ids = {assoc.tool_id for assoc in AgentRepository.get_agent_tool_associations(db, agent_id)}
+        valid_ids = set(AgentRepository.get_valid_tool_ids(db, deduped, app_id))
+        new_ids = [tool_id for tool_id in deduped if tool_id not in current_ids]
+        new_ids = [tool_id for tool_id in new_ids if tool_id in valid_ids]
+        if new_ids and agent_id:
+            # DFS from each new id: reaching agent_id means the new edge closes a cycle.
+            # agent_id's own outgoing edges are never expanded (reaching it raises first).
+            # ponytail: read-then-write without a lock — two simultaneous opposite saves (A→B, B→A) can both pass; lock the App row (SELECT … FOR UPDATE) if that ever matters
+            edges = AgentRepository.get_tool_edges_by_app_id(db, app_id)
+            for tool_id in new_ids:
+                seen = set()
+                stack = [tool_id]
+                while stack:
+                    current = stack.pop()
+                    if current == agent_id:
+                        raise ValueError(f"Adding agent {tool_id} as a tool would create a cycle")
+                    if current in seen:
+                        continue
+                    seen.add(current)
+                    stack.extend(edges.get(current, []))
+        return [tool_id for tool_id in deduped if tool_id in valid_ids]
 
     @staticmethod
     def validate_current_middlewares(db: Session, app_id: int, agent_id: int, has_memory: bool) -> None:

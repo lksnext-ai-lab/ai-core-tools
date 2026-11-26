@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Settings, FileText, Lightbulb, Zap, Search, Image, Terminal, FolderSearch,  Target, Plus, Tv, MessageSquare, Plug, Wrench, Store } from 'lucide-react';
 import { apiService, ApiError, type ScheduledTask } from '../services/api';
@@ -34,9 +34,14 @@ import ButtonApp from '../components/ui/ButtonApp';
 import { FormActions } from '../components/ui/FormActions';
 import BackgroundImage from '../components/ui/BackgroundImage';
 import { CardApp } from '../components/ui/CardApp';
+import { SegmentedTabs } from '../components/ui/SegmentedTabs';
 import { LoadingState } from '../components/ui/LoadingState';
 import type { ServiceLifecycleWarning } from '../types/services';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
+import { AgentCanvas } from '../components/visual-editor/agent-canvas/AgentCanvas';
+import { useConfirm } from '../contexts/ConfirmContext';
+
+type AgentView = 'form' | 'visual';
 
 // Define the Agent types
 interface Agent {
@@ -226,6 +231,22 @@ function extractA2AFieldErrors(err: unknown): AgentA2AFieldErrors | null {
   return Object.keys(errors).length > 0 ? errors : null;
 }
 
+const EMPTY_MARKETPLACE_PROFILE: MarketplaceProfileUpdate = {
+  display_name: null,
+  short_description: null,
+  long_description: null,
+  category: null,
+  tags: null,
+  icon_url: null,
+  cover_image_url: null,
+  conversation_starters: [],
+};
+
+// Serialized editor state; compared against the snapshot to detect unsaved changes.
+function serializeEditorState(formData: AgentFormData, marketplaceProfile: MarketplaceProfileUpdate): string {
+  return JSON.stringify({ formData, marketplaceProfile });
+}
+
 function ScheduledTaskReference({ appId, agentId }: { appId: number; agentId: number }) {
   const { t } = useTranslation('common');
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
@@ -257,9 +278,14 @@ function AgentFormPage() {
   const { t } = useTranslation('common');
   const { appId, agentId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
   const mutate = useApiMutation();
   const { hasMinRole } = useAppRole(appId);
-  const canEditA2A = hasMinRole(AppRole.EDITOR);
+  const canEdit = hasMinRole(AppRole.EDITOR);
+  const canCreateShared = hasMinRole(AppRole.ADMINISTRATOR);
+  const confirm = useConfirm();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [a2aCardUrl, setA2aCardUrl] = useState<string | null>(null);
   const [a2aRpcUrl, setA2aRpcUrl] = useState<string | null>(null);
@@ -302,6 +328,8 @@ function AgentFormPage() {
   const [saving, setSaving] = useState(false);
   /** Load / server errors (not field validation) — banner at the top of the page. */
   const [error, setError] = useState<string | null>(null);
+  // JSON of formData as loaded from (or last saved to) the backend; used to detect unsaved changes.
+  const [snapshot, setSnapshot] = useState<string | null>(null);
   const errorBannerRef = useRef<HTMLDivElement>(null);
   /** Field validation shows only after the first save attempt; from then on it updates live. */
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -359,16 +387,7 @@ function AgentFormPage() {
   // Marketplace state
   const [showMarketplace, setShowMarketplace] = useState(false);
   const [marketplaceVisibility, setMarketplaceVisibility] = useState<MarketplaceVisibility>('unpublished');
-  const [marketplaceProfile, setMarketplaceProfile] = useState<MarketplaceProfileUpdate>({
-    display_name: null,
-    short_description: null,
-    long_description: null,
-    category: null,
-    tags: null,
-    icon_url: null,
-    cover_image_url: null,
-    conversation_starters: [],
-  });
+  const [marketplaceProfile, setMarketplaceProfile] = useState<MarketplaceProfileUpdate>(EMPTY_MARKETPLACE_PROFILE);
 
   // Load agent data when component mounts
   useEffect(() => {
@@ -432,8 +451,9 @@ function AgentFormPage() {
     };
   }, [appId, formData.silo_id]);
 
-  async function loadAgentData() {
-    if (!appId || !agentId) return;
+  // Reloads the agent and its marketplace profile. Returns false when the reload failed.
+  async function loadAgentData(): Promise<boolean> {
+    if (!appId || !agentId) return false;
 
     try {
       setLoading(true);
@@ -442,7 +462,7 @@ function AgentFormPage() {
       setAgent(response);
 
       // Initialize form data
-      setFormData({
+      const loadedFormData: AgentFormData = {
         name: response.name || '',
         description: response.description || '',
         system_prompt: response.system_prompt || '',
@@ -471,7 +491,8 @@ function AgentFormPage() {
         rag_k: response.rag_k ?? 10,
         rag_search_type: response.rag_search_type ?? 'similarity',
         rag_score_threshold: response.rag_score_threshold ?? null,
-        rag_max_retrieval_calls: response.rag_max_retrieval_calls ?? 4,
+        // Null means unlimited retrieval calls, so it is kept as is (not coerced to a number).
+        rag_max_retrieval_calls: response.rag_max_retrieval_calls ?? null,
         rag_fixed_filters: (response.rag_fixed_filters ?? []).map((f) => ({
           ...f,
           _key: randomId(),
@@ -491,7 +512,8 @@ function AgentFormPage() {
         a2a_description_override: response.a2a_description_override ?? null,
         a2a_skill_tags: response.a2a_skill_tags ?? [],
         a2a_examples: response.a2a_examples ?? [],
-      });
+      };
+      setFormData(loadedFormData);
       setA2aCardUrl(response.a2a_card_url ?? null);
       setA2aRpcUrl(response.a2a_rpc_url ?? null);
 
@@ -499,6 +521,7 @@ function AgentFormPage() {
       setShowOutputParser(!!response.output_parser_id);
 
       // Load MCP usage and marketplace profile for existing agents
+      let loadedProfile: MarketplaceProfileUpdate = EMPTY_MARKETPLACE_PROFILE;
       if (Number.parseInt(agentId) !== 0) {
         try {
           const usage = await apiService.getAgentMCPUsage(Number.parseInt(appId), Number.parseInt(agentId));
@@ -507,22 +530,21 @@ function AgentFormPage() {
           console.error('Error loading MCP usage:', usageErr);
         }
 
-          try {
-            const profile = await apiService.getAgentMarketplaceProfile(Number.parseInt(appId), Number.parseInt(agentId));
-            setMarketplaceProfile({
-              display_name: profile.display_name || null,
-              short_description: profile.short_description || null,
-              long_description: profile.long_description || null,
-              category: profile.category || null,
-              tags: profile.tags || null,
-              icon_url: profile.icon_url || null,
-              cover_image_url: profile.cover_image_url || null,
-              conversation_starters: profile.conversation_starters?.map(s => s.prompt) || [],
-            });
-          } catch {
-            // Profile may not exist yet — that's fine
-          }
-
+        try {
+          const profile = await apiService.getAgentMarketplaceProfile(Number.parseInt(appId), Number.parseInt(agentId));
+          loadedProfile = {
+            display_name: profile.display_name || null,
+            short_description: profile.short_description || null,
+            long_description: profile.long_description || null,
+            category: profile.category || null,
+            tags: profile.tags || null,
+            icon_url: profile.icon_url || null,
+            cover_image_url: profile.cover_image_url || null,
+            conversation_starters: profile.conversation_starters?.map(s => s.prompt) || [],
+          };
+        } catch {
+          // Profile may not exist yet — fall back to the empty profile
+        }
 
         // Marketplace visibility comes from agent detail
         if (response.marketplace_visibility) {
@@ -530,9 +552,14 @@ function AgentFormPage() {
           setShowMarketplace(response.marketplace_visibility !== 'unpublished');
         }
       }
+
+      setMarketplaceProfile(loadedProfile);
+      setSnapshot(serializeEditorState(loadedFormData, loadedProfile));
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t('agentFormPage.errors.loadFailed'));
       console.error('Error loading agent data:', err);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -685,10 +712,11 @@ function AgentFormPage() {
     setPendingFocusField(field);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!appId || !agentId) return;
+  // Saves the agent. Returns true on success. Navigates away unless `stay` is set, in which
+  // case the agent is reloaded so the form matches what the backend stored, and the result
+  // is whether that reload succeeded.
+  async function submitAgent(options?: { stay?: boolean }): Promise<boolean> {
+    if (!appId || !agentId) return false;
 
     const hasSilo = !!formData.silo_id;
     const usesThreshold = formData.rag_search_type === 'similarity_score_threshold';
@@ -698,7 +726,7 @@ function AgentFormPage() {
     if (firstInvalid) {
       // Take the user to the first field to fix, in its tab.
       goToField(firstInvalid);
-      return;
+      return false;
     }
 
     // Drop incomplete filter rows and the editor-only _key; clear the threshold unless the
@@ -788,8 +816,11 @@ function AgentFormPage() {
     setSaving(false);
 
     if (result !== undefined) {
-      navigate(`/apps/${appId}/agents`);
-      return;
+      if (options?.stay) {
+        return loadAgentData();
+      }
+      navigate(returnTo || `/apps/${appId}/agents`);
+      return true;
     }
 
     try {
@@ -803,9 +834,89 @@ function AgentFormPage() {
       // Keep the existing top-level banner in addition to the per-field messages.
       setError(errorMessage(err, t('agentFormPage.saving.failed')));
     }
+    return false;
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitAgent();
   };
 
   const isNewAgent = Number.parseInt(agentId || '0') === 0;
+  // The visual editor is the default (and needs a saved agent, so a new agent always shows the form).
+  const view: AgentView = !isNewAgent && searchParams.get('view') !== 'form' ? 'visual' : 'form';
+  const isDirty = useMemo(
+    () => snapshot !== null && serializeEditorState(formData, marketplaceProfile) !== snapshot,
+    [formData, marketplaceProfile, snapshot],
+  );
+
+  // Every visual -> form switch (toggle, the inspector's "Open full editor" link, browser Back)
+  // reloads, so the form shows what the canvas saved instead of the mount-time snapshot.
+  const previousViewRef = useRef<AgentView>(view);
+  useEffect(() => {
+    const previousView = previousViewRef.current;
+    previousViewRef.current = view;
+    if (previousView !== 'visual' || view !== 'form') return;
+    void (async () => {
+      // A failed reload leaves the form's fields stale, so go back to the canvas instead of offering Save.
+      if (!(await loadAgentData())) {
+        setSearchParams({ view: 'visual' }, { replace: true, state: location.state });
+      }
+    })();
+  }, [view]);
+
+  // Keeps location.state (returnTo) so the link back to the list survives the toggle.
+  // `form` must be explicit now that visual is the default when the param is absent.
+  const changeView = (next: AgentView) => {
+    setSearchParams(next === 'form' ? { view: 'form' } : {}, { state: location.state });
+  };
+
+  // Canvas saves don't reload the form, so refresh only what the header shows
+  // (agent name and lifecycle warnings). The form itself reloads when switching back.
+  const refreshAgentHeader = useCallback(() => {
+    if (!appId || !agentId) return;
+    apiService
+      .getAgent(Number.parseInt(appId), Number.parseInt(agentId))
+      .then(setAgent)
+      .catch((err) => console.error('Error refreshing agent data:', err));
+  }, [appId, agentId]);
+
+  const handleViewChange = async (next: AgentView) => {
+    if (next === view) return;
+
+    if (next === 'visual') {
+      if (isDirty) {
+        // Closing the dialog without choosing keeps the form and its edits.
+        let dismissed = false;
+        const saveFirst = await confirm({
+          title: t('agentFormPage.unsaved.title'),
+          message: t('agentFormPage.unsaved.message'),
+          confirmLabel: t('agentFormPage.unsaved.save'),
+          cancelLabel: t('agentFormPage.unsaved.discard'),
+          onDismiss: () => {
+            dismissed = true;
+          },
+        });
+        if (dismissed) return;
+        if (saveFirst) {
+          const saved = await submitAgent({ stay: true });
+          if (!saved) return;
+        } else if (!(await loadAgentData())) {
+          return;
+        }
+      }
+      changeView('visual');
+      return;
+    }
+
+    // The view effect reloads the agent once the form is shown.
+    changeView('form');
+  };
+
+  const viewOptions: ReadonlyArray<{ id: AgentView; label: string }> = [
+    { id: 'form', label: t('agentFormPage.view.form') },
+    { id: 'visual', label: t('agentFormPage.view.visual') },
+  ];
 
   if (loading) {
     return (
@@ -857,7 +968,8 @@ function AgentFormPage() {
 
   return (
     <div className="min-h-screen px-6">
-      <div className="max-w-4xl mx-auto">
+      {/* The visual editor uses the full width; the form keeps the centred column. */}
+      <div className={view === 'visual' ? 'mx-auto' : 'max-w-4xl mx-auto'}>
         {/* Page Header */}
         <div className="flex items-center justify-between mb-8">
           <Title
@@ -866,6 +978,16 @@ function AgentFormPage() {
             variant="titPrincipal"
             subtitleMarginBottom={0}
           />
+          {!isNewAgent && (
+            <div className="w-56 shrink-0">
+              <SegmentedTabs
+                tabs={viewOptions}
+                activeTab={view}
+                onChange={(next) => { if (!saving) void handleViewChange(next); }}
+                ariaLabel={t('agentFormPage.view.label')}
+              />
+            </div>
+          )}
         </div>
 
         {agent && (
@@ -909,15 +1031,27 @@ function AgentFormPage() {
           />
         )}
 
-        {/* Agent Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Tab Navigation */}
-          <Tabs
-            tabs={tabs}
-            activeTab={activeTab}
-            onChange={setActiveTab}
-          />
-          {!isNewAgent && agent && <ScheduledTaskReference appId={Number.parseInt(appId ?? '0')} agentId={agent.agent_id} />}
+        {/* Agent Form, or the visual editor. The canvas sits outside the <form> so Enter in its inputs cannot submit the agent. */}
+        {view === 'visual' ? (
+          <div className="h-[calc(100vh-19rem)] min-h-[32rem]">
+            <AgentCanvas
+              key={`${appId}:${agentId}`}
+              appId={Number(appId)}
+              agentId={Number(agentId)}
+              canEdit={canEdit}
+              canCreateShared={canCreateShared}
+              onSaved={refreshAgentHeader}
+            />
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Tab Navigation */}
+            <Tabs
+              tabs={tabs}
+              activeTab={activeTab}
+              onChange={setActiveTab}
+            />
+            {!isNewAgent && agent && <ScheduledTaskReference appId={Number.parseInt(appId ?? '0')} agentId={agent.agent_id} />}
 
           {/* TAB 1: BASIC */}
           {activeTab === 'basic' && (
@@ -1069,6 +1203,14 @@ function AgentFormPage() {
                           agent={agent}
                         />
                       </div>
+
+                      <OutputParserField
+                        showOutputParser={showOutputParser}
+                        setShowOutputParser={setShowOutputParser}
+                        formData={formData}
+                        handleInputChange={handleInputChange}
+                        agent={agent}
+                      />
                     </div>
                   </CardApp>
 
@@ -1886,7 +2028,7 @@ function AgentFormPage() {
               onChange={handleA2AChange}
               cardUrl={a2aCardUrl}
               rpcUrl={a2aRpcUrl}
-              disabled={!canEditA2A}
+              disabled={!canEdit}
               fieldErrors={a2aFieldErrors}
             />
           )}
@@ -1908,6 +2050,7 @@ function AgentFormPage() {
             containerClassName="mt-8 pt-6"
           />
         </form>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { apiService } from '../services/api';
 import { useApiMutation } from '../hooks/useApiMutation';
@@ -40,6 +40,8 @@ function SiloFormPage() {
   const { t } = useTranslation('common');
   const { appId, siloId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
   const mutate = useApiMutation();
   const [silo, setSilo] = useState<Silo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,12 +97,12 @@ function SiloFormPage() {
     );
 
     if (result !== undefined) {
-      navigate(`/apps/${appId}/silos`);
+      navigate(returnTo || `/apps/${appId}/silos`);
     }
   }
 
   function handleCancel() {
-    navigate(`/apps/${appId}/silos`);
+    navigate(returnTo || `/apps/${appId}/silos`);
   }
   
   if (loading) {

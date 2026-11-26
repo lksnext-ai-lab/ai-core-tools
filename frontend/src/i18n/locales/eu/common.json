@@ -4093,7 +4093,235 @@
     "apiKeyInstructions": "Deitzaileek aplikazioaren API gako bat bidali behar dute X-API-KEY goiburuan. Sortu gakoak aplikazioaren",
     "apiKeysSettings": "API gakoen ezarpenetan"
   },
+  "agentCanvas": {
+    "kinds": {
+      "agent": "Agentea",
+      "ocrAgent": "OCR agentea",
+      "service": "AA zerbitzua",
+      "silo": "Siloa",
+      "embedding": "Embedding",
+      "skill": "Skill",
+      "mcp": "MCP konfigurazioa",
+      "parser": "Irteera-parserra",
+      "sandbox": "Sandbox zerbitzua",
+      "middleware": "Middleware"
+    },
+    "canvas": {
+      "loading": "Agentearen oihala kargatzen…",
+      "tryAgain": "Saiatu berriro",
+      "connectTo": "Konektatu {{name}} honekin:",
+      "alreadyConnected": "{{name}} dagoeneko konektatuta dago",
+      "cannotConnect": "{{kind}} ezin da agente honekin konektatu",
+      "alreadyOnCanvas": "{{name}} dagoeneko oihalean dago",
+      "resizePalette": "Aldatu piezen paletaren tamaina",
+      "resizeInspector": "Aldatu ikuskatzailearen tamaina",
+      "title": "Agentearen oihala"
+    },
+    "nodes": {
+      "notConnected": "Konektatu gabe",
+      "tool": "Tresna"
+    },
+    "ports": {
+      "model": "Eredua",
+      "knowledge": "Ezagutza",
+      "skills": "Skills",
+      "tools": "Tresnak",
+      "output": "Irteera",
+      "middlewares": "Middlewares",
+      "sandbox": "Sandbox",
+      "transcription": "Transkripzioa",
+      "video": "Bideoa",
+      "media_embedding": "Multimedia embedding",
+      "vision": "Ikusmena",
+      "text": "Testua"
+    },
+    "inspector": {
+      "title": "Ikuskatzailea",
+      "emptyHint": "Hautatu agentea, pieza bat edo konexio bat oihalean hemen editatzeko.",
+      "openFullEditor": "Ireki editore osoa",
+      "edit": "Editatu",
+      "adminRequired": "Administratzaile rola behar da",
+      "nameRequired": "Izena beharrezkoa da",
+      "memoryNeedsMediaEmbedding": "Agente elkarrizketatsuek multimedia embedding zerbitzu bat behar dute txatean igotako fitxategiak indexatzeko: konektatu bat Media embedding atakara lehenik",
+      "thresholdRequired": "Puntuazio-atalasea (0–1) beharrezkoa da atalase-estrategia gorde aurretik",
+      "retrievalSettings": "Berreskuratze-ezarpenak",
+      "knowledgeLabel": "Ezagutza",
+      "connectedTo": "{{port}} atakari konektatuta.",
+      "thisPort": "ataka honi",
+      "disconnectHint": "Sakatu Delete edo Atzera tekla oihalean deskonektatzeko.",
+      "fields": {
+        "name": "Izena",
+        "description": "Deskribapena",
+        "visionPrompt": "Ikusmen-prompta",
+        "textPrompt": "Testu-prompta",
+        "systemPrompt": "Sistemaren prompta",
+        "temperature": "Tenperatura",
+        "temperatureHelp": "0 = deterministikoa, 2 = oso sortzailea."
+      },
+      "toggles": {
+        "isTool": {
+          "label": "Tresna-agentea",
+          "help": "Beste agenteek erabil dezakete"
+        },
+        "hasMemory": {
+          "label": "Elkarrizketatsua",
+          "help": "Elkarrizketaren memoria mantentzen du"
+        },
+        "codeInterpreter": {
+          "label": "Kode-interpretea",
+          "help": "Agenteari Python kodea exekutatzeko aukera ematen dio"
+        },
+        "skillRouter": {
+          "label": "Skill bideratzailea",
+          "help": "Utzi ereduari gehienez 2 skill aurrehautatzen txanda bakoitzeko"
+        }
+      },
+      "badges": {
+        "system": "Sistema",
+        "tool": "Tresna"
+      },
+      "info": {
+        "type": "Mota",
+        "model": "Eredua",
+        "toolAgent": "Tresna-agentea",
+        "tools": "Tresnak",
+        "requests": "Eskaerak",
+        "lastUsed": "Azken erabilera",
+        "provider": "Hornitzailea",
+        "video": "Bideoa",
+        "vectorDb": "Bektore-DB",
+        "documents": "Dokumentuak",
+        "transport": "Garraioa",
+        "fields": "Eremuak",
+        "description": "Deskribapena",
+        "noModel": "Eredurik ez",
+        "yes": "Bai",
+        "no": "Ez",
+        "never": "Inoiz ez",
+        "supported": "Bateragarria",
+        "notSupported": "Ez bateragarria"
+      }
+    },
+    "palette": {
+      "ariaLabel": "Piezen paleta",
+      "filter": "Iragazi piezak",
+      "expand": "Zabaldu piezen paleta",
+      "collapse": "Tolestu piezen paleta",
+      "create": "Sortu {{kind}}",
+      "none": "Oraindik ez dago bat ere",
+      "noMatches": "Ez dago iragazkiarekin bat datorren piezarik.",
+      "memoryComingSoon": "Memoria — laster",
+      "systemBadge": "Sistema",
+      "toolBadge": "Tresna",
+      "connectTurnsTool": "Konektatzean Tresna agentea aktibatzen da",
+      "categories": {
+        "ai_service": "AA zerbitzuak",
+        "silo": "Ezagutza",
+        "skill": "Skillak",
+        "mcp": "MCP zerbitzariak",
+        "agent": "Agenteak",
+        "parser": "Irteera-parserrak",
+        "middleware": "Middleware-ak",
+        "sandbox": "Sandbox",
+        "embedding": "Embedding"
+      },
+      "singular": {
+        "ai_service": "AA zerbitzua",
+        "silo": "silo",
+        "skill": "skill",
+        "mcp": "MCP zerbitzaria",
+        "agent": "agentea",
+        "parser": "irteera-parserra",
+        "middleware": "middleware",
+        "sandbox": "sandbox zerbitzua",
+        "embedding": "embedding zerbitzua"
+      }
+    },
+    "createPiece": {
+      "title": {
+        "silo": "Sortu silo berria",
+        "skill": "Sortu skill berria",
+        "mcp": "Sortu MCP konfigurazio berria",
+        "parser": "Sortu datu-egitura berria",
+        "middleware": "Sortu middleware berria",
+        "agent": "Sortu agente berria"
+      },
+      "entity": {
+        "ai_service": "AA zerbitzua",
+        "embedding": "embedding zerbitzua",
+        "sandbox": "sandbox zerbitzua",
+        "silo": "silo",
+        "skill": "skill",
+        "mcp": "MCP konfigurazioa",
+        "agent": "agentea",
+        "parser": "datu-egitura",
+        "middleware": "middleware"
+      },
+      "creating": "{{entity}} sortzen…",
+      "created": "{{entity}} sortu da",
+      "saveFailed": "Ezin izan da gorde: {{entity}}",
+      "loading": "{{entity}} kargatzen…",
+      "parserLoadFailed": "Ezin izan dira parserraren aukerak kargatu"
+    },
+    "editPiece": {
+      "title": {
+        "skill": "Editatu skilla",
+        "mcp": "Editatu MCP konfigurazioa",
+        "middleware": "Editatu middleware-a",
+        "parser": "Editatu datu-egitura",
+        "service": "Editatu zerbitzua"
+      },
+      "updating": "{{entity}} eguneratzen…",
+      "updated": "{{entity}} eguneratu da",
+      "saveFailed": "Ezin izan da gorde: {{entity}}",
+      "loadFailed": "Ezin izan da kargatu: {{entity}}",
+      "loading": "{{entity}} kargatzen…",
+      "failedToLoad": "Ezin izan da kargatu: {{entity}}."
+    },
+    "phrases": {
+      "ai_service": "AA zerbitzu bat",
+      "embedding": "Embedding zerbitzu bat",
+      "sandbox": "Sandbox zerbitzu bat",
+      "silo": "Silo bat",
+      "skill": "Skill bat",
+      "mcp": "MCP zerbitzari bat",
+      "agent": "Agente bat",
+      "parser": "Irteera-parser bat",
+      "middleware": "Middleware bat"
+    },
+    "rules": {
+      "readOnly": "Ez duzu agente hau editatzeko baimenik",
+      "wrongPort": "{{kind}} ezin da {{port}} atakara konektatu",
+      "noVideo": "AA zerbitzu honek ez du bideorik onartzen",
+      "selfTool": "Agente batek ezin du bere burua tresna gisa erabili",
+      "toolLoop": "Honek begizta bat sortuko luke: agente horrek dagoeneko hau erabiltzen du tresna gisa",
+      "retired": "Zerbitzu hau erretiratuta dago eta ezin da konektatu",
+      "deprecated": "Zerbitzu hau zaharkituta dago eta laster utziko dio funtzionatzeari",
+      "needsMediaEmbedding": "Agente elkarrizketatzaileek multimedia-embedding zerbitzu bat behar dute. Desaktibatu lehenik Elkarrizketa."
+    },
+    "save": {
+      "nowTool": "{{name}} tresna gisa erabil daiteke orain",
+      "codeInterpreterOn": "Kode-interpretatzailea aktibatu da {{name}} erabiltzeko",
+      "replaced": "{{replaced}} ordez {{name}} jarri da",
+      "connected": "{{name}} konektatu da",
+      "dropHint": " — transkripziorako edo bideorako erabiltzeko, jaregin ataka horretan",
+      "connectionFailed": "Ezin izan da konexioa eguneratu",
+      "agentFailed": "Ezin izan da agentea eguneratu",
+      "connectionUpdated": "Konexioa eguneratu da"
+    }
+  },
   "agentFormPage": {
+  "view": {
+    "label": "Editorearen ikuspegia",
+    "form": "Formularioa",
+    "visual": "Bisuala"
+  },
+  "unsaved": {
+    "title": "Gorde gabeko aldaketak",
+    "message": "Aldaketak gorde nahi dituzu editore bisuala ireki aurretik?",
+    "save": "Gorde eta jarraitu",
+    "discard": "Baztertu"
+  },
     "title": {
       "ocr": "OCR agentea",
       "create": "Sortu agentea",

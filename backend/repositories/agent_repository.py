@@ -270,6 +270,23 @@ class AgentRepository:
             AgentRepository.visible_agents_clause(),
         )
         return [id for (id,) in tools_query]
+
+    @staticmethod
+    def get_tool_edges_by_app_id(db: Session, app_id: int) -> Dict[int, List[int]]:
+        """Map every agent of the app to the ids of the tool agents it uses.
+
+        Used for cycle detection: each entry is one agent's outgoing "uses" edges.
+        """
+        edges: Dict[int, List[int]] = {}
+        rows = (
+            db.query(AgentTool.agent_id, AgentTool.tool_id)
+            .join(Agent, Agent.agent_id == AgentTool.agent_id)
+            .filter(Agent.app_id == app_id)
+            .all()
+        )
+        for agent_id, tool_id in rows:
+            edges.setdefault(agent_id, []).append(tool_id)
+        return edges
     
     # ==================== RELATED DATA QUERIES ====================
     

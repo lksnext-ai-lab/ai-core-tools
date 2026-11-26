@@ -15,6 +15,8 @@ export interface ConfirmOptions {
   readonly confirmLabel?: string;
   readonly cancelLabel?: string;
   readonly variant?: ConfirmVariant;
+  /** Called when the dialog is closed without choosing (Escape, backdrop, X); the promise still resolves false. */
+  readonly onDismiss?: () => void;
 }
 
 interface ConfirmContextValue {
@@ -40,7 +42,10 @@ export function ConfirmProvider({ children }: ConfirmProviderProps) {
     (options: ConfirmOptions): Promise<boolean> =>
       new Promise<boolean>((resolve) => {
         const previous = pendingRef.current;
-        if (previous) previous.resolve(false);
+        if (previous) {
+          previous.onDismiss?.();
+          previous.resolve(false);
+        }
         setPending({ ...options, resolve });
       }),
     [],
@@ -60,6 +65,13 @@ export function ConfirmProvider({ children }: ConfirmProviderProps) {
     });
   }, []);
 
+  const handleDismiss = useCallback(() => {
+    const current = pendingRef.current;
+    current?.onDismiss?.();
+    current?.resolve(false);
+    setPending(null);
+  }, []);
+
   const value = useMemo<ConfirmContextValue>(() => ({ confirm }), [confirm]);
 
   return (
@@ -75,6 +87,7 @@ export function ConfirmProvider({ children }: ConfirmProviderProps) {
           variant={pending.variant}
           onConfirm={handleConfirm}
           onCancel={handleCancel}
+          onDismiss={handleDismiss}
         />
       )}
     </ConfirmContext.Provider>

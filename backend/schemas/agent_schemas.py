@@ -285,6 +285,7 @@ class AgentListItemSchema(BaseModel):
     marketplace_visibility: Optional[str] = None
     is_frozen: bool = False
     a2a_enabled: bool = False
+    tool_ids: List[int] = []
     lifecycle_warnings: List[ServiceLifecycleWarningSchema] = []
 
     model_config = ConfigDict(from_attributes=True)

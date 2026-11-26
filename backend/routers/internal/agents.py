@@ -456,6 +456,8 @@ async def create_or_update_agent(
             # Chain not sent: it stays as is, but must still fit the agent's new settings
             # (e.g. memory cannot be turned off under a human-approval middleware).
             AgentService.validate_current_middlewares(db, app_id, agent_id, bool(agent_data.has_memory))
+        # Tool selection must be valid and acyclic before anything is written.
+        agent_data.tool_ids = AgentService.validate_tool_selection(db, app_id, agent_id, agent_data.tool_ids or [])
         # Create or update agent
         created_agent_id = agent_service.create_or_update_agent(db, agent_dict, agent_data.type)
     except ValueError as exc:
