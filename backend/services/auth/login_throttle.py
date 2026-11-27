@@ -8,6 +8,7 @@ Env vars: ``LOCAL_LOGIN_THROTTLE_PER_IP_PER_MIN`` (default 20),
 ``TRUST_PROXY_HEADERS`` (default true — uses X-Forwarded-For first hop).
 """
 
+import math
 import threading
 import time
 from dataclasses import dataclass
@@ -73,7 +74,8 @@ class InProcessLoginThrottle:
         current_time = time.time()
         current_minute = int(current_time // 60)
         window_reset_epoch = (current_minute + 1) * 60
-        retry_after = max(0, int(window_reset_epoch - current_time))
+        # ceil: never report 0 s (an immediate retry) during the last second of the window
+        retry_after = max(1, math.ceil(window_reset_epoch - current_time))
 
         with self._lock:
             counter = self._counters.get(key)

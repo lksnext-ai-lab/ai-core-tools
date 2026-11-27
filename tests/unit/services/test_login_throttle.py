@@ -143,6 +143,14 @@ class TestPerIpWindow:
         assert blocked.retry_after_seconds > 0
         assert blocked.retry_after_seconds <= 60
 
+    def test_retry_after_is_never_zero_in_last_second_of_window(self, monkeypatch):
+        # Minute starts at 1_000_020: 30.5 s in -> 29.5 s left; 59.5 s in -> 0.5 s left, still 1.
+        for now, expected in ((1_000_050.5, 30), (1_000_079.5, 1)):
+            monkeypatch.setattr("services.auth.login_throttle.time.time", lambda n=now: n)
+            t = fresh(per_minute=1)
+            t.hit("ip:10.0.0.1")
+            assert t.hit("ip:10.0.0.1").retry_after_seconds == expected
+
 
 # ---------------------------------------------------------------------------
 # Per-account window (independent counter)
