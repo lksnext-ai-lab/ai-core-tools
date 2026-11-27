@@ -703,6 +703,14 @@ async def create_agent(
         if retriever_tool is not None:
             tools.append(retriever_tool)
 
+    # Whole files from the repository behind the agent's own silo (agents only, never the App Chat).
+    if working_dir and not surface.is_chat:
+        from tools.repository_file_tools import build_repository_file_tool
+
+        repository_file_tool = await build_repository_file_tool(agent, working_dir, sandbox_handle)
+        if repository_file_tool is not None:
+            tools.append(repository_file_tool)
+
     # Add temp silo retrievers (e.g. playground media/file uploads)
     has_temp_retrievers = False
     has_media_content = False

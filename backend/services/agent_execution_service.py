@@ -152,6 +152,9 @@ class _LazySandboxHandle:
         self._handle = None
         self._remote_pre_existing_files: set = set()
         self._remote_inputs_prepared = False
+        # Files a tool added to input/ during the turn (e.g. get_repository_file): (filename, abs_path).
+        # Pushed with the uploads when the sandbox is first prepared, and again after a recreation.
+        self._staged_inputs: list[tuple[str, str]] = []
         self._lock = threading.RLock()
         # The resolved SandboxService.service_id this handle's provider was
         # built from (None when falling back to the system env-var default).
@@ -467,6 +470,9 @@ class _LazySandboxHandle:
                     self._exc_text(snap_exc),
                 )
 
+            for filename, abs_path in self._staged_inputs:
+                self._push_input_file(filename, abs_path)
+
             for pf in self._processed_files:
                 filename = _safe_workspace_filename(pf.get("filename", ""))
                 file_path = pf.get("file_path")
@@ -497,6 +503,51 @@ class _LazySandboxHandle:
                         self._exc_text(push_exc),
                     )
         self._remote_inputs_prepared = True
+
+    def _push_input_file(self, filename: str, abs_path: str) -> bool:
+        """Write one local file to ``input/<filename>`` in the sandbox. Caller holds a lease. Never raises."""
+        try:
+            with open(abs_path, "rb") as fh:
+                raw = fh.read()
+            self._provider.write_file(self._handle, f"{_WORKSPACE_INPUT_DIR}/{filename}", raw)
+            logger.debug("pushed staged file '%s' into sandbox %s", filename, self.session_key)
+            return True
+        except Exception as push_exc:
+            logger.warning(
+                "failed to push staged file '%s' into sandbox %s: %s",
+                filename,
+                self.session_key,
+                self._exc_text(push_exc),
+            )
+            return False
+
+    def stage_input_file(self, filename: str, abs_path: str) -> bool:
+        """Make a local file available at ``input/<filename>`` in the sandbox, without creating the sandbox.
+
+        Before the sandbox exists the file is only queued, and pushed when code first runs; if the sandbox
+        is already prepared it is pushed now. Local (non file-sync) providers read the working dir directly,
+        so there is nothing to push. Returns False only when an immediate push failed.
+        """
+        filename = _safe_workspace_filename(filename)
+        with self._lock:
+            self._staged_inputs = [(f, p) for f, p in self._staged_inputs if f != filename]
+            self._staged_inputs.append((filename, abs_path))
+            if not self._provider.requires_file_sync or not self._remote_inputs_prepared or self._handle is None:
+                return True
+            from services.sandbox_session_service import sandbox_session_service as _sss
+
+            try:
+                with _sss.use(
+                    self.session_key,
+                    conversation=self._conversation,
+                    db=self._db,
+                    expected_seconds=30,
+                    sandbox_service_id=self.sandbox_service_id,
+                ):
+                    return self._push_input_file(filename, abs_path)
+            except Exception as exc:
+                logger.warning("could not lease sandbox %s to push '%s': %s", self.session_key, filename, self._exc_text(exc))
+                return False
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.get(), name)
