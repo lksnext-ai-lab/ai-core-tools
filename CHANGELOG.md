@@ -7,26 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-27
+
+### Breaking Changes
+
+- **OpenSandbox needs an API key**: with the docker `opensandbox` profile, `OPENSANDBOX_API_KEY` (at least 32 characters) is mandatory and `OPENSANDBOX_INSECURE_SERVER=YES` alone no longer starts the server (the dev escape also needs `OPENSANDBOX_ALLOW_INSECURE_DEV=1`). Existing deployments: define the key, drop `OPENSANDBOX_INSECURE_SERVER`, then `docker compose --profile opensandbox down` and `up -d` (the control network is recreated and live sandboxes are lost).
+- **Rolling back the App Chat migrations deletes Chat data**: the `ichat001` downgrade removes conversations, files and defaults of the Chat and purges its temporary repositories, silos, vectors and checkpoints. Roll back by downgrading first and then switching to the old image. See `docs/ai/app-chat.md`.
+- **Frontend library mode removed** (see Removed): client projects that consumed `@lksnext/ai-core-tools-base` must migrate to deploying the application image.
+
 ### Added
 
 - **Per-silo indexing settings**: every silo (and its repository, from the repository form) chooses its chunk size and overlap (200–8000 characters, overlap at most half; applied to every file type and to raw/crawled content) and its PDF loader with that loader's options. Loaders: `pymupdf` (fast, plain page text, ~0.01 s/page — the pre-0.5.1 behaviour) and `pymupdf4llm` (structured: Markdown in layout mode, reading order across columns, headings, tables, page headers/footers removed; chunks split by section with their section path as prefix and `page`/`total_pages`/`section` metadata; ~0.5 s/page; options `section_prefix` and `remove_headers_footers`). New silos default to 2000/400 with `pymupdf`; existing silos keep 1000/200 with `pymupdf` (migration `siloidx001`). Settings are part of silo create/update (internal and public API), silo/repository detail (with the loader catalog in `indexing_options`) and silo export/import (an unknown loader in an export falls back to defaults with a warning). Changing them only affects content indexed afterwards. New loaders are registered in `backend/tools/document_loaders/`.
+- **App Chat**: a "Chat" entry per App (minimum role VIEWER) with ChatGPT-style conversations where each user picks, per message, the AI service, knowledge source (silo, repository, SharePoint, domain), skills and MCP configs. It runs on a hidden internal agent per App that is never exposed in lists, export, marketplace, MCP, A2A or the public API; conversations, files and defaults are private to each user. One turn at a time per conversation (`409 CONVERSATION_BUSY`), attachments indexed into hidden temporary silos with the App's default embedding service (or sent whole), step limit (`AICT_CHAT_RECURSION_LIMIT`, `AICT_AGENT_RECURSION_LIMIT`; `422 STEP_LIMIT_REACHED`) and at most `CHAT_MAX_FILES_PER_TURN` files per message. New tables and migrations `ichat001` to `ichat004`. See `docs/ai/app-chat.md` and `docs/guides/chat-bot/app-chat.md`.
+- **Code interpreter in the App Chat** (opt-in per App, `App.chat_code_interpreter_enabled`, changed by administrators): one sandbox per conversation, per-user and per-App sandbox caps, bounded executions per turn and bounded output files (`SANDBOX_*` variables).
+- **App images and user profile pictures**: normalised 256x256 WebP pictures stored in the database (`app_image` and `user_avatar` tables, migrations `appimage001` and `useravatar001`), managed from the App settings and the profile page.
+- **Basque (`eu`) locale** with the full interface translated (pending native review), next to English and Spanish; a parity test keeps the three locales in sync.
+- **Interface redesign**: new app shell and design system (side panels for forms and details, breadcrumbs, badges, alerts, dark theme, Storybook 10).
+- **Smaller interface improvements**: initials avatar on the user's chat messages (App Chat, playground, marketplace), identifier computed from the name on the My Apps cards, wider chat layout, playground conversation actions in the page header, and a General entry in the App settings submenu.
 
 ### Changed
 
 - **Structure-aware PDF loader of 0.5.1 replaced** by the `pymupdf4llm` loader above; it produced chunks without overlap, up to several times the chunk size, and wrong section labels. If the layout parser fails on a PDF, that PDF is indexed with `pymupdf`; a missing `pymupdf4llm` install fails the indexing instead. Markdown table rows (also in `.md` files) are no longer dropped by the garbage-line filter.
 - **Dependencies**: PyMuPDF 1.27 → 2.1 (exact pin, together with the new `pymupdf4llm` 2.1); `onnxruntime` is pulled in for the layout model, which makes the backend image larger. PDF extraction still runs synchronously in the indexing request.
+- **Docs and agents**: the `.claude` agents and `CLAUDE.md` now require translations in `en`, `es` and `eu`.
 
 ### Fixed
 
 - **Editing a silo no longer changes its type**: the silo form always sent `type: CUSTOM`, so saving a domain, SharePoint or repository silo from the silos list silently turned it into a custom silo. The form now omits the type on update and the stored one is kept.
+- **Silo playground "neighbouring chunks"** always came back empty: the id from the query string was compared as a string against the integer `resource_id`/`media_id` stored on each chunk. A non-integer `source_id` now returns 400. Moving a file or media between folders in a Qdrant silo now also updates its chunks' folder metadata (same mismatch; PGVector was not affected).
+- **Session expiry during streaming**: chat, playground and approval streams now renew an expired session and retry once instead of failing with "Authentication failed".
+- **Generated images with streaming**: images produced by a model (OpenAI image generation, Gemini) are saved to the conversation output folder and shown in the answer also when the response is streamed.
+
+### Security
+
+- **Dependencies**: upgraded packages with open MEDIUM CVEs (backend and frontend), including Storybook 10.6.7, `follow-redirects` 1.16.3 and overrides for `glob` and `minimatch` in dev-only chains.
 
 ### Removed
 
 - **Library / client-project mode**: the frontend is no longer packaged or published as the `@lksnext/ai-core-tools-base` npm library. Removed `deploy/` (client-project scripts and template), the `build:lib` / `publish:npm` scripts and the library Vite/TypeScript build, `src/index.ts`, and the client-setup and plugin-development guides. The last published npm version (0.3.0) is left untouched. The frontend app shell `ExtensibleBaseApp` is now `AppRoot` and `LibraryConfig` is `AppConfig`; the extra-routes and navigation-merging extension points (`extraRoutes`, `NavigationMerger`) were removed.
-
-### Fixed
-
-- **Silo playground "neighbouring chunks"** always came back empty: the id from the query string was compared as a string against the integer `resource_id`/`media_id` stored on each chunk. A non-integer `source_id` now returns 400. Moving a file or media between folders in a Qdrant silo now also updates its chunks' folder metadata (same mismatch; PGVector was not affected).
 
 ## [0.5.1] - 2026-11-18
 
