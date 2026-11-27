@@ -31,6 +31,26 @@ STORAGE_STRATEGY_EPHEMERAL = "ephemeral"
 STORAGE_STRATEGY_PERSISTENT = "persistent"
 
 
+def extract_text_from_path(path: str, filename: str) -> Optional[str]:
+    """Text an agent gets for a file, with the same extractors as chat uploads.
+
+    PDF (text layer), ``.docx`` and plain-text types (txt, md, json, csv). Returns ``None`` for any other
+    type (images, ``.doc``, spreadsheets, presentations, unknown): there is no text extraction for them.
+    Synchronous; extraction errors propagate to the caller.
+    """
+    file_type = FileManagementService._get_file_type(filename)
+    if file_type == "pdf":
+        return extract_text_from_pdf(path)
+    if file_type == "text":
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    if file_type == "document" and filename.lower().endswith(".docx"):
+        import docx2txt
+
+        return docx2txt.process(path) or ""
+    return None
+
+
 class UnsupportedFileTypeError(Exception):
     """Raised by ``_process_file_content(strict=True)`` for a file type that would
     otherwise fall back to a placeholder ("not implemented"/"type: unknown") sentence
@@ -620,7 +640,8 @@ class FileManagementService:
             logger.error(f"Error registering output file: {e}")
             return None
 
-    def _get_file_type(self, filename: str) -> str:
+    @staticmethod
+    def _get_file_type(filename: str) -> str:
         """Get file type from filename"""
         if not filename:
             return "unknown"
@@ -673,13 +694,11 @@ class FileManagementService:
 
             try:
                 if file_type == "pdf":
-                    # Use existing PDF tools
-                    content = extract_text_from_pdf(temp_path)
+                    content = extract_text_from_path(temp_path, file.filename) or ""
                     return content, temp_path, file_size
 
                 elif file_type == "text":
-                    # Read text files
-                    content = await read_text(temp_path)
+                    content = await asyncio.to_thread(extract_text_from_path, temp_path, file.filename)
                     return content, temp_path, file_size
 
                 elif file_type == "image":
@@ -691,8 +710,7 @@ class FileManagementService:
                     return content, temp_path, file_size
 
                 elif file_type == "document" and file.filename.lower().endswith(".docx"):
-                    import docx2txt
-                    content = docx2txt.process(temp_path) or ""
+                    content = extract_text_from_path(temp_path, file.filename) or ""
                     return content, temp_path, file_size
 
                 elif file_type == "document":

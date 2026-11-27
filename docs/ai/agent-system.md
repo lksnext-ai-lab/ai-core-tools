@@ -161,6 +161,30 @@ if agent.silo_id and search_params:
     # Add docs to context
 ```
 
+### Whole repository files (`get_repository_file`)
+
+When the agent's silo belongs to a **repository**, the agent also gets `get_repository_file`
+(`backend/tools/repository_file_tools.py`). Search returns only chunks; this tool fetches one entire file, for
+example a meeting-minutes template the agent must fill in, so users don't have to upload it every time.
+
+- **Lookup**: the file is identified by the `ref` or `name` in the search results' metadata, its path in the
+  repository, or its bare name. An ambiguous or unknown name returns an error listing the candidates or the
+  available files. Only the repository behind the agent's own silo is reachable (fixed when the tool is
+  built), and paths are resolved inside that repository's folder.
+- **Result**: the file's text, extracted the same way as chat uploads (`extract_text_from_path`: PDF, `.docx`,
+  txt/md/json/csv). Other types are still copied, without text.
+- **`destination="input"`** (default): copied to the turn's `input/<name>`, like an upload but **not** listed
+  in the conversation's files. With a code interpreter it is also available at `input/<name>` in the sandbox:
+  staged on the lazy handle (`_LazySandboxHandle.stage_input_file`) and pushed when the sandbox is first
+  prepared, or right away if it already is. It never creates a sandbox by itself.
+- **`destination="output"`**: copied to `output/<name>`, so it is registered at the end of the turn and the
+  user can download it from the files panel.
+- **Not available** in the App Chat, or for silos that are not backed by a repository (custom, domain,
+  SharePoint). No size limit yet.
+
+Prompt example: *"Before writing the minutes, call `get_repository_file` with `plantilla_acta.docx` and follow
+that template exactly."*
+
 ## Memory Management
 
 ### Conversation memory
