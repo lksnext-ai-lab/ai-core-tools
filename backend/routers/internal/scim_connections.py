@@ -18,7 +18,6 @@ from schemas.scim_connection_schemas import (
     OIDCIdentityLinkResponse,
 )
 from schemas.keycloak_scim_setup_schemas import (
-    KeycloakLocalSetupStatus,
     KeycloakReconciliationRequest,
     KeycloakReconciliationResponse,
     KeycloakTargetSetupRequest,
@@ -32,7 +31,6 @@ from services.scim_connection_admin_service import (
     scim_connection_admin_service,
 )
 from services.keycloak_scim_setup_service import (
-    KeycloakLocalSetupDisabledError,
     KeycloakTargetSetupError,
     keycloak_scim_setup_service,
 )
@@ -40,17 +38,6 @@ from services.keycloak_scim_setup_service import (
 router = APIRouter(tags=["admin"])
 
 _SCIM_CONNECTION_NOT_FOUND_DETAIL = "SCIM connection not found."
-_KEYCLOAK_SETUP_DISABLED_DETAIL = "Local Keycloak auto-setup is disabled."
-
-
-@router.get("/keycloak-local-setup/status")
-async def keycloak_local_setup_status(
-    _: Annotated[AuthContext, Depends(require_admin)],
-) -> KeycloakLocalSetupStatus:
-    """Report whether local-only Keycloak auto-setup is enabled."""
-    return KeycloakLocalSetupStatus(
-        enabled=keycloak_scim_setup_service.is_enabled()
-    )
 
 
 @router.get("")
@@ -113,11 +100,6 @@ async def configure_keycloak_target(
         return await keycloak_scim_setup_service.configure_target(
             db, connection_id, payload
         )
-    except KeycloakLocalSetupDisabledError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_KEYCLOAK_SETUP_DISABLED_DETAIL,
-        ) from exc
     except KeycloakTargetSetupError as exc:
         raise HTTPException(
             status_code=exc.status_code,
@@ -161,11 +143,6 @@ async def _run_keycloak_reconciliation(
         return await keycloak_scim_setup_service.reconcile(
             db, connection_id, payload, dry_run=dry_run
         )
-    except KeycloakLocalSetupDisabledError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_KEYCLOAK_SETUP_DISABLED_DETAIL,
-        ) from exc
     except KeycloakTargetSetupError as exc:
         raise HTTPException(
             status_code=exc.status_code,
@@ -251,11 +228,6 @@ async def update_connection(
         return await keycloak_scim_setup_service.update_connection(
             db, connection_id, payload
         )
-    except KeycloakLocalSetupDisabledError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_KEYCLOAK_SETUP_DISABLED_DETAIL,
-        ) from exc
     except KeycloakTargetSetupError as exc:
         raise HTTPException(
             status_code=exc.status_code,

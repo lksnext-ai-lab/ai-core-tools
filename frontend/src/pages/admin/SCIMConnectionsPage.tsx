@@ -48,7 +48,6 @@ const getReconciliationAnnouncement = (
 type SCIMProvider = 'keycloak' | 'entra';
 
 function SCIMConnectionsPage() {
-  const [setupEnabled, setSetupEnabled] = useState<boolean | null>(null);
   const [connections, setConnections] = useState<SCIMConnection[]>([]);
   const [connectionsLoading, setConnectionsLoading] = useState(true);
   const [editingConnection, setEditingConnection] = useState<SCIMConnection | null>(null);
@@ -84,13 +83,9 @@ function SCIMConnectionsPage() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      apiService.getSCIMKeycloakLocalSetupStatus(),
-      apiService.getSCIMConnections(),
-    ])
-      .then(([status, existingConnections]) => {
+    apiService.getSCIMConnections()
+      .then((existingConnections) => {
         if (!active) return;
-        setSetupEnabled(status.enabled);
         setConnections(existingConnections);
         const firstActiveKeycloak = existingConnections.find(
           (item) => isKeycloakConnection(item) && item.is_active,
@@ -523,13 +518,6 @@ function SCIMConnectionsPage() {
       </section>
       )}
 
-      {providerType === 'keycloak' && setupEnabled === false && (
-        <output className="block rounded-md border border-line p-4 text-sm text-fg-secondary dark:border-line-dark dark:text-fg-secondary-dark">
-          Auto-setup is disabled. The operator must set{' '}
-          <code className="font-mono">SCIM_KEYCLOAK_LOCAL_AUTOCONNECT_ENABLED=true</code> and restart the backend.
-        </output>
-      )}
-
       {error && (
         <Alert type="error" message={error} />
       )}
@@ -574,7 +562,7 @@ function SCIMConnectionsPage() {
               onChange={(event) => setDirectoryId(event.target.value)}
               required
               maxLength={255}
-              disabled={busy || (providerType === 'keycloak' && setupEnabled !== true) || Boolean(connection)}
+              disabled={busy || Boolean(connection)}
             />
           </div>
           <div>
@@ -587,14 +575,14 @@ function SCIMConnectionsPage() {
               required
               maxLength={255}
               placeholder={providerType === 'keycloak' ? 'Keycloak test realm' : 'Entra tenant'}
-              disabled={busy || (providerType === 'keycloak' && setupEnabled !== true) || Boolean(connection)}
+              disabled={busy || Boolean(connection)}
             />
           </div>
           <div className="sm:col-span-2">
             <ButtonApp
               label="Create SCIM connection"
               type="submit"
-              disabled={busy || (providerType === 'keycloak' && setupEnabled !== true) || Boolean(connection)}
+              disabled={busy || Boolean(connection)}
               loading={busy}
             />
           </div>
@@ -788,7 +776,7 @@ function SCIMConnectionsPage() {
             <ButtonApp
               label={busy ? 'Running dry-run…' : 'Run dry-run'}
               type="submit"
-              disabled={busy || !reconcileConnectionId || setupEnabled !== true}
+              disabled={busy || !reconcileConnectionId}
               loading={busy}
             />
           </div>
@@ -875,11 +863,6 @@ function SCIMConnectionsPage() {
                           Mattin will check the current and new realms. If a target for this connection exists in either realm,
                           the realm change will be rejected. Target configuration is not moved.
                         </p>
-                        {setupEnabled === false && (
-                          <output className="block">
-                            Realm changes require <code>SCIM_KEYCLOAK_LOCAL_AUTOCONNECT_ENABLED=true</code>.
-                          </output>
-                        )}
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div>
                             <label htmlFor="edit-keycloak-admin-url" className={labelClassName}>Keycloak Admin URL</label>
@@ -938,9 +921,6 @@ function SCIMConnectionsPage() {
                         type="submit"
                         disabled={
                           busy
-                          || (isKeycloakConnection(item)
-                            && editDirectoryId.trim() !== (item.external_directory_id ?? '')
-                            && setupEnabled !== true)
                         }
                         loading={busy}
                       />

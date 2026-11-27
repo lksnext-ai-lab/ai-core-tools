@@ -1,10 +1,6 @@
 from pydantic import AnyHttpUrl, BaseModel, Field, SecretStr
 
 
-class KeycloakLocalSetupStatus(BaseModel):
-    enabled: bool
-
-
 class KeycloakTargetSetupRequest(BaseModel):
     mattin_scim_base_url: AnyHttpUrl
     keycloak_admin_base_url: AnyHttpUrl

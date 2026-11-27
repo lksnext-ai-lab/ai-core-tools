@@ -69,10 +69,6 @@ export interface SCIMConnectionUpdate {
   keycloak_admin_password?: string;
 }
 
-export interface KeycloakLocalSetupStatus {
-  enabled: boolean;
-}
-
 export interface KeycloakTargetSetupRequest {
   mattin_scim_base_url: string;
   keycloak_admin_base_url: string;
@@ -1032,10 +1028,6 @@ class ApiService {
       },
     );
     return { apps, hasMore };
-  }
-
-  async getSCIMKeycloakLocalSetupStatus(): Promise<KeycloakLocalSetupStatus> {
-    return this.request('/internal/admin/scim-connections/keycloak-local-setup/status');
   }
 
   async getSCIMConnections(): Promise<SCIMConnection[]> {

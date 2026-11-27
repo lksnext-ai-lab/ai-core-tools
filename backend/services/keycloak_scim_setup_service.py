@@ -1,7 +1,6 @@
 import asyncio
 import ipaddress
 import json
-import os
 import time
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -38,10 +37,6 @@ _KEYCLOAK_ADMIN_URL_LABEL = "Keycloak Admin URL"
 _LOCAL_KEYCLOAK_UNREACHABLE_ERROR = "Could not reach the local Keycloak server."
 
 
-class KeycloakLocalSetupDisabledError(Exception):
-    """Raised when local Keycloak auto-setup is not explicitly enabled."""
-
-
 class KeycloakTargetSetupError(Exception):
     """Raised when Keycloak target setup cannot be completed safely."""
 
@@ -58,10 +53,6 @@ class KeycloakSCIMSetupService:
         repository: SCIMConnectionAdminRepository | None = None,
     ) -> None:
         self.repository = repository or SCIMConnectionAdminRepository()
-
-    @staticmethod
-    def is_enabled() -> bool:
-        return os.getenv("SCIM_KEYCLOAK_LOCAL_AUTOCONNECT_ENABLED", "").lower() == "true"
 
     @staticmethod
     def _local_url(value: AnyHttpUrl, label: str) -> str:
@@ -361,8 +352,6 @@ class KeycloakSCIMSetupService:
         connection: ProvisioningConnection,
         payload: SCIMConnectionUpdate,
     ) -> None:
-        if not self.is_enabled():
-            raise KeycloakLocalSetupDisabledError
         if (
             payload.keycloak_admin_base_url is None
             or payload.keycloak_admin_username is None
@@ -626,8 +615,6 @@ class KeycloakSCIMSetupService:
         payload: KeycloakReconciliationRequest,
         dry_run: bool,
     ) -> KeycloakReconciliationResponse:
-        if not self.is_enabled():
-            raise KeycloakLocalSetupDisabledError
         if not dry_run and not payload.confirm_real_reconcile:
             raise KeycloakTargetSetupError(
                 "Explicit confirmation is required for a real reconciliation.",
@@ -795,9 +782,6 @@ class KeycloakSCIMSetupService:
         connection_id: int,
         payload: KeycloakTargetSetupRequest,
     ) -> KeycloakTargetSetupResponse:
-        if not self.is_enabled():
-            raise KeycloakLocalSetupDisabledError
-
         keycloak_url = self._local_url(
             payload.keycloak_admin_base_url, _KEYCLOAK_ADMIN_URL_LABEL
         )

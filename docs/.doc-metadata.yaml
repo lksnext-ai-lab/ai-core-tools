@@ -12,17 +12,14 @@ last_synced_by: "docs-manager-agent"
 # Summary of the last sync operation
 last_sync_summary:
   files_updated:
-    - "docs/architecture/rfc-scim-provisioning.md"
     - "docs/guides/scim-keycloak.md"
     - "docs/.doc-metadata.yaml"
   files_created: []
   files_deleted: []
   commits_covered: null
-  commit_range: "726a635..8ffceb9"
+  commit_range: null
   notes: >
-    Focused SCIM behavior documentation update: user deprovisioning disables the
-    local User, removes provisioning identity links, group memberships, and
-    manager references while retaining business data, apps, ownership, groups,
-    and group-to-app policies; group PATCH remove with path=members and no value
-    clears all memberships. Commit history was not enumerated, so commits_covered
-    is unknown; no unrelated documentation was audited.
+    Focused update to docs/guides/scim-keycloak.md: removed obsolete
+    SCIM_KEYCLOAK_LOCAL_AUTOCONNECT_ENABLED opt-in instructions. The previous
+    last_synced_commit and date are retained because the current HEAD commit
+    could not be verified; no commit range is asserted for this focused change.

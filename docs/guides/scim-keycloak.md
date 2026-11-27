@@ -43,17 +43,9 @@ tests that target's connectivity, and lets an administrator preview and run
 reconciliation. This is a local-development convenience, not a production
 setup flow.
 
-### Enable the opt-in
-
-The wizard is disabled unless the backend operator explicitly sets:
-
-```text
-SCIM_KEYCLOAK_LOCAL_AUTOCONNECT_ENABLED=true
-```
-
-Restart the backend after changing the environment. The page reports when
-auto-setup is disabled; the wizard cannot configure the Keycloak target until
-the opt-in is enabled. Keep it disabled outside local testing.
+The wizard is available to Mattin administrators without an environment
+flag. It is restricted to local HTTP(S) URLs and is intended only for local
+testing; do not use it with production credentials or services.
 
 ### Configure and test
 
