@@ -911,10 +911,10 @@ export default function MarketplaceChatPage() {
           {messages.map((message) => {
             if (message.type === 'user') {
               return (
-                <div key={message.id} className="flex justify-end max-w-[760px] mx-auto animate-slide-in-right gap-4">
+                <div key={message.id} className="flex justify-end w-full animate-slide-in-right gap-4">
                   <UserAvatar name={user?.name} email={user?.email} src={avatarUrl} size={38} className="mt-0.5" />
                   
-                  <div className="max-w-[82%]">
+                  <div className="max-w-[94%] min-w-0">
                     <div className="bg-bronze-bg dark:bg-bronze-bg-dark border border-bronze-border dark:border-bronze-border-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
                       <MessageContent content={message.content} resolveFileUrl={resolveFileUrl} />
                     </div>
@@ -933,8 +933,8 @@ export default function MarketplaceChatPage() {
 
             if (message.type === 'error') {
               return (
-                <div key={message.id} className="flex justify-start max-w-[760px] mx-auto animate-slide-in-left">
-                  <div className="max-w-[82%]">
+                <div key={message.id} className="flex justify-start w-full animate-slide-in-left">
+                  <div className="max-w-[94%] min-w-0">
                     <div className="bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark text-error dark:text-error-dark rounded-md px-4 py-[13px]">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs font-semibold uppercase tracking-wide">{t('marketplaceChat.errorLabel')}</span>
@@ -955,9 +955,9 @@ export default function MarketplaceChatPage() {
             return (
               <div
                 key={message.id}
-                className={`flex justify-start max-w-[760px] mx-auto ${wasStreamed ? '' : 'animate-slide-in-left'}`}
+                className={`flex justify-start w-full ${wasStreamed ? '' : 'animate-slide-in-left'}`}
               >
-                <div className="flex items-start gap-4 max-w-[82%]">
+                <div className="flex items-start gap-4 max-w-[94%] min-w-0">
                   <BackgroundImage icon={Bot} size={38} iconSize={18} variant="vacio" className="mt-0.5 border border-accent dark:border-accent-dark" />
                   <div className="min-w-0 flex-1">
                     <div className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-md px-4 py-[13px] text-sm leading-relaxed text-fg dark:text-fg-dark">
@@ -984,13 +984,16 @@ export default function MarketplaceChatPage() {
           })}
 
           {showStreaming && (
-            <StreamingMessage
-              content={streamingContent}
-              isStreaming={isStreaming}
-              elapsedMs={responseElapsedMs}
-              activeTools={activeTools}
-              thinkingMessage={thinkingMessage}
-            />
+            // Indented by the agent avatar (38px) + gap (16px) so the streaming text lines up with the committed bubbles.
+            <div className="pl-[54px]">
+              <StreamingMessage
+                content={streamingContent}
+                isStreaming={isStreaming}
+                elapsedMs={responseElapsedMs}
+                activeTools={activeTools}
+                thinkingMessage={thinkingMessage}
+              />
+            </div>
           )}
 
           {pendingApproval && !isStreaming && (
@@ -1036,7 +1039,7 @@ export default function MarketplaceChatPage() {
         )}
 
         {/* Input */}
-        <div className="w-full max-w-[808px] mx-auto px-6 pb-[22px] pt-3 flex-shrink-0">
+        <div className="w-full px-6 pb-[22px] pt-3 flex-shrink-0">
           {isQuotaExceeded && quotaInfo && (
             <div className="bg-error-bg dark:bg-error-bg-dark border border-error-border dark:border-error-border-dark rounded-lg p-3 mb-3 flex items-start gap-2">
               <span className="text-error dark:text-error-dark flex-shrink-0" aria-hidden="true">⚠️</span>
