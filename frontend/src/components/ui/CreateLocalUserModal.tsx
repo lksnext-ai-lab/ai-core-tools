@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import Modal from './Modal';
 import OneTimeLinkModal from './OneTimeLinkModal';
 import { adminService } from '../../services/admin';
 import type { LocalUserCreated } from '../../services/admin';
 import { ApiError } from '../../services/api';
 import { errorMessage } from '../../constants/messages';
+import { FormActions } from './FormActions';
+import FormField from './FormField';
 
 export interface CreateLocalUserModalProps {
   readonly isOpen: boolean;
@@ -16,6 +19,7 @@ export interface CreateLocalUserModalProps {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function CreateLocalUserModal({ isOpen, onClose, onCreated }: CreateLocalUserModalProps) {
+  const { t } = useTranslation('common');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,9 +51,9 @@ function CreateLocalUserModal({ isOpen, onClose, onCreated }: CreateLocalUserMod
   }, [isOpen]);
 
   function validate(): string | null {
-    if (!email.trim()) return 'Email is required.';
-    if (!EMAIL_PATTERN.test(email.trim())) return 'Please enter a valid email address.';
-    if (!name.trim()) return 'Name is required.';
+    if (!email.trim()) return t('localUserModal.emailRequired');
+    if (!EMAIL_PATTERN.test(email.trim())) return t('localUserModal.emailInvalid');
+    if (!name.trim()) return t('localUserModal.nameRequired');
     return null;
   }
 
@@ -72,9 +76,9 @@ function CreateLocalUserModal({ isOpen, onClose, onCreated }: CreateLocalUserMod
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 409) {
         setEmailTaken(true);
-        setFormError('A user with this email address already exists.');
+        setFormError(t('localUserModal.emailExists'));
       } else {
-        setFormError(errorMessage(err, 'Failed to create user.'));
+        setFormError(errorMessage(err, t('localUserModal.createFailed')));
       }
     } finally {
       setIsSubmitting(false);
@@ -94,15 +98,15 @@ function CreateLocalUserModal({ isOpen, onClose, onCreated }: CreateLocalUserMod
         onClose={handleLinkClose}
         token={createdUser.set_password_token}
         expiresAt={createdUser.expires_at}
-        title={`User created — ${createdUser.email}`}
+        title={t('localUserModal.createdTitle', { email: createdUser.email })}
       />
     );
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Create user" size="medium">
+    <Modal isOpen={isOpen} onClose={onClose} title={t('userManagement.createUser')} size="medium">
       <form onSubmit={handleSubmit} noValidate className="space-y-5">
-        <p className="text-xs text-gray-500 dark:text-slate-400">Fields marked * are required.</p>
+        <p className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{t('localUserModal.requiredFields')}</p>
         {/* Always in DOM — role=alert implies aria-live=assertive */}
         <div
           id="create-user-error"
@@ -116,70 +120,43 @@ function CreateLocalUserModal({ isOpen, onClose, onCreated }: CreateLocalUserMod
           )}
         </div>
 
-        <div>
-          <label htmlFor="create-user-email" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">
-            Email <span aria-hidden="true">*</span>
-          </label>
-          <input
-            ref={emailInputRef}
-            id="create-user-email"
-            type="email"
-            value={email}
-            onChange={(e) => { setEmail(e.target.value); setEmailTaken(false); }}
-            required
-            aria-required="true"
-            aria-invalid={emailTaken || (formError !== null && (!email.trim() || !EMAIL_PATTERN.test(email.trim())))}
-            aria-describedby="create-user-error"
-            autoComplete="email"
-            disabled={isSubmitting}
-            placeholder="user@example.com"
-            className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-        </div>
+        <FormField
+          ref={emailInputRef}
+          label={t('localUserModal.email')}
+          id="create-user-email"
+          type="email"
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); setEmailTaken(false); }}
+          required
+          ariaRequired
+          ariaInvalid={emailTaken || (formError !== null && (!email.trim() || !EMAIL_PATTERN.test(email.trim())))}
+          ariaDescribedBy="create-user-error"
+          autoComplete="email"
+          disabled={isSubmitting}
+          placeholder={t('login.emailPlaceholder')}
+        />
 
-        <div>
-          <label htmlFor="create-user-name" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">
-            Full name <span aria-hidden="true">*</span>
-          </label>
-          <input
-            id="create-user-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            aria-required="true"
-            aria-invalid={formError !== null && !name.trim()}
-            aria-describedby="create-user-error"
-            autoComplete="name"
-            disabled={isSubmitting}
-            placeholder="Jane Doe"
-            className="w-full px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg text-sm text-gray-900 dark:text-slate-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-        </div>
+        <FormField
+          label={t('localUserModal.fullName')}
+          id="create-user-name"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          ariaRequired
+          ariaInvalid={formError !== null && !name.trim()}
+          ariaDescribedBy="create-user-error"
+          autoComplete="name"
+          disabled={isSubmitting}
+          placeholder={t('localUserModal.namePlaceholder')}
+        />
 
-        <div className="flex justify-end gap-3 border-t border-gray-200 dark:border-slate-700 pt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isSubmitting && (
-              <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            )}
-            {isSubmitting ? 'Creating…' : 'Create user'}
-          </button>
-        </div>
+        <FormActions
+          onCancel={onClose}
+          isSubmitting={isSubmitting}
+          submitLabel={t('userManagement.createUser')}
+          submittingLabel={t('localUserModal.creating')}
+        />
       </form>
     </Modal>
   );

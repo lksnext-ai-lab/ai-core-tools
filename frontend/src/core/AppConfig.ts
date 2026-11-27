@@ -1,0 +1,79 @@
+import type { ThemeConfig, NavigationConfig } from './types';
+import type { AuthProps } from '../auth/AuthConfig';
+
+export interface OrganizationConfig {
+  name: string;
+  /** Optional logo URL; when absent the chip shows the name's initials. */
+  logo?: string;
+}
+
+export interface AppConfig {
+  // Basic configuration
+  name?: string;
+  logo?: string;
+  favicon?: string;
+
+  /** Client organization shown as a chip in the header (display only, no logic). */
+  organization?: OrganizationConfig;
+  
+  // Theme configuration
+  themeProps?: {
+    defaultTheme?: string;
+    customThemes?: Record<string, ThemeConfig>;
+    showThemeSelector?: boolean;
+  };
+  
+  // Layout configuration
+  headerProps?: {
+    title?: string;
+    logoUrl?: string;
+    className?: string;
+    children?: React.ReactNode;
+  };
+  
+  footerProps?: {
+    copyright?: string;
+    className?: string;
+    children?: React.ReactNode;
+    showVersion?: boolean;
+  };
+  
+  layoutProps?: {
+    mainClassName?: string;
+    className?: string;
+  };
+  
+  navigationProps?: {
+    className?: string;
+    showIcons?: boolean;
+  };
+  
+  // Sidebar configuration
+  sidebarProps?: {
+    className?: string;
+    children?: React.ReactNode;
+    title?: string;
+    logoUrl?: string;
+  };
+  
+  // Navigation configuration (defaults to defaultNavigation)
+  navigationConfig?: NavigationConfig;
+  
+  // Authentication configuration
+  authProps?: AuthProps;
+  
+  // API configuration
+  apiConfig?: {
+    baseUrl?: string;
+    timeout?: number;
+    retries?: number;
+  };
+  
+  // Feature configuration
+  features?: {
+    showSidebar?: boolean;
+    showHeader?: boolean;
+    showFooter?: boolean;
+    showThemeSelector?: boolean;
+  };
+}

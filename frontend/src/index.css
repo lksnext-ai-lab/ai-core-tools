@@ -2,50 +2,119 @@
 @tailwind components;
 @tailwind utilities;
 
+
+/* Customizable select (Chrome/Edge 135+); other browsers keep the native picker */
+@supports (appearance: base-select) {
+  .marketplace-filter-select,
+  .marketplace-filter-select::picker(select) {
+    appearance: base-select;
+  }
+
+  /* Keep the closed select unchanged on hover/open (base-select adds a grey tint) */
+  .marketplace-filter-select,
+  .marketplace-filter-select:hover,
+  .marketplace-filter-select:open {
+    background-color: theme('colors.surface.DEFAULT');
+  }
+
+  .dark .marketplace-filter-select,
+  .dark .marketplace-filter-select:hover,
+  .dark .marketplace-filter-select:focus,
+  .dark .marketplace-filter-select:open {
+    background-color: theme('colors.surface.dark');
+  }
+
+  /* While the picker is open focus moves to the option, so :focus alone misses the first click */
+  .marketplace-filter-select:open,
+  .dark .marketplace-filter-select:open {
+    border-color: theme('colors.accent.DEFAULT');
+  }
+
+  .marketplace-filter-select[aria-invalid='true']:open {
+    border-color: theme('colors.error.DEFAULT');
+  }
+
+  .dark .marketplace-filter-select[aria-invalid='true']:open {
+    border-color: theme('colors.error.dark');
+  }
+
+  .marketplace-filter-select::picker(select) {
+    border: 1px solid theme('colors.line.DEFAULT');
+    border-radius: 8px;
+    padding: 4px;
+    background: theme('colors.surface.DEFAULT');
+  }
+
+  .dark .marketplace-filter-select::picker(select) {
+    border-color: theme('colors.line.dark');
+    background: theme('colors.surface.dark');
+  }
+
+  .marketplace-filter-select option:hover,
+  .marketplace-filter-select option:focus-visible {
+    background-color:theme('colors.surface.tint');
+    outline: none;
+  }
+
+  .dark .marketplace-filter-select option:not(:checked) {
+    background-color: theme('colors.surface.dark');
+    color: theme('colors.ink.dark');
+  }
+
+  .dark .marketplace-filter-select option:hover,
+  .dark .marketplace-filter-select option:focus-visible {
+    background-color: theme('colors.surface.dark');
+  }
+
+  .marketplace-filter-select option:checked {
+    background-color: theme('colors.bronze.bg-soft');
+    color: theme('colors.bronze.DEFAULT');
+  }
+
+  .dark .marketplace-filter-select option:checked {
+    background-color: theme('colors.bronze.bg-dark');
+    color: theme('colors.bronze.dark');
+  }
+
+  .marketplace-filter-select option::checkmark {
+    display: none;
+  }
+
+  /* Native time input: the dropdown list is browser-drawn, only color-scheme/accent reach it */
+  input[type="time"] {
+    accent-color: theme('colors.bronze.DEFAULT');
+  }
+
+  .dark input[type="time"] {
+    color-scheme: dark;
+    accent-color: theme('colors.bronze.dark');
+  }
+
+  /* Focused hour/minute segment; Chrome ignores :focus here, :focus-within matches */
+  input[type="time"]::-webkit-datetime-edit-hour-field:focus-within,
+  input[type="time"]::-webkit-datetime-edit-minute-field:focus-within {
+    background-color: theme('colors.bronze.bg-soft');
+    color: theme('colors.bronze.DEFAULT');
+    border-radius: 4px;
+  }
+
+  .dark input[type="time"]::-webkit-datetime-edit-hour-field:focus-within,
+  .dark input[type="time"]::-webkit-datetime-edit-minute-field:focus-within {
+    background-color: theme('colors.bronze.bg-dark');
+    color: theme('colors.bronze.dark');
+  }
+
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+  }
+}
+
 /* Staggered entrance: elements start invisible, animation fills to opacity:1 */
 .animate-fade-in-up,
 .animate-fade-in-up-d1,
 .animate-fade-in-up-d2,
 .animate-fade-in-up-d3 {
   opacity: 0;
-}
-
-/* Theme-aware button: uses CSS var from ThemeProvider */
-.btn-primary {
-  background-color: var(--color-primary);
-}
-.btn-primary:hover {
-  filter: brightness(0.88);
-}
-.btn-primary:active {
-  transform: scale(0.96);
-}
-
-/* Login form — gradient CTA button */
-.btn-login-gradient {
-  background: linear-gradient(
-    135deg,
-    var(--color-primary) 0%,
-    color-mix(in srgb, var(--color-primary) 80%, #7c3aed 20%) 50%,
-    color-mix(in srgb, var(--color-primary) 60%, #0ea5e9 40%) 100%
-  );
-  background-size: 200% 200%;
-  transition: background-position 0.4s ease, box-shadow 0.3s ease, transform 0.15s ease;
-}
-.btn-login-gradient:hover:not(:disabled) {
-  background-position: right center;
-  box-shadow: 0 0 20px color-mix(in srgb, var(--color-primary) 50%, transparent);
-}
-.btn-login-gradient:active:not(:disabled) {
-  transform: scale(0.97);
-}
-
-/* Login form — input focus glow (focus-visible: keyboard only, not mouse click) */
-.input-login:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 25%, transparent),
-              0 0 0 1px color-mix(in srgb, var(--color-primary) 60%, transparent);
-  border-color: color-mix(in srgb, var(--color-primary) 70%, transparent);
 }
 
 /* Login — speech bubble emerge animation (grows from robot side) */
@@ -88,48 +157,28 @@
    Playground — glassmorphic chat components
    ============================================ */
 
-/* Semi-transparent glass panel (adapts to light/dark via opacity) */
-.pg-glass {
-  @apply bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl border border-white/20 dark:border-gray-700/30 shadow-lg;
-}
-
-/* User chat bubble — neutral gray, readable in both modes (modern pattern) */
-.pg-bubble-user {
-  @apply bg-gray-100 dark:bg-gray-700/80 text-gray-900 dark:text-gray-100
-         rounded-2xl rounded-br-sm px-4 py-3;
-}
 
 /* Agent message — no bubble, clean plain text (ChatGPT / Claude.ai pattern) */
 .pg-bubble-agent {
   @apply px-1 py-2;
 }
 
-/* Send button gradient */
-.pg-btn-send {
-  @apply bg-gradient-to-r from-blue-600 to-indigo-600 text-white
-         rounded-xl px-4 py-2.5 font-medium
-         hover:from-blue-700 hover:to-indigo-700
-         disabled:opacity-40 disabled:cursor-not-allowed
-         transition-all duration-150 active:scale-95;
-}
+
 
 /* Tool status pill */
 .pg-tool-pill {
   @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium
-         bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300
-         border border-indigo-200/50 dark:border-indigo-700/30;
-}
-.pg-tool-pill--complete {
-  @apply bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300
-         border-emerald-200/50 dark:border-emerald-700/30;
+         bg-info-bg dark:bg-info-bg-dark
+         text-info dark:text-info-dark
+         border border-info-border dark:border-info-border-dark;
 }
 
-/* Visual grouping for nested sub-agent tool activity */
-.pg-tool-group {
-  @apply inline-flex max-w-full items-center gap-1.5 rounded-full
-         border border-sky-200/70 dark:border-sky-700/40
-         bg-sky-50/80 dark:bg-sky-950/30 px-1.5 py-1;
+.pg-tool-pill--complete {
+  @apply bg-success-bg dark:bg-success-bg-dark
+         text-success dark:text-success-dark
+         border-success-border dark:border-success-border-dark;
 }
+
 
 .pg-tool-group-label {
   @apply max-w-32 px-1.5 text-[10px] font-semibold uppercase tracking-wide
@@ -138,57 +187,30 @@
 
 /* Blinking cursor for streaming text */
 .pg-cursor::after {
-  content: '▍';
-  @apply animate-blink-cursor text-indigo-500 dark:text-indigo-400 ml-0.5;
+  /* Empty alternative text after the slash: the cursor is decoration, not content to read out. */
+  content: '▍' / '';
+  @apply animate-blink-cursor text-fg dark:text-fg-dark ml-0.5;
 }
 
 /* Scroll-to-bottom fab */
 .pg-scroll-fab {
   @apply absolute bottom-20 left-1/2 -translate-x-1/2
-         bg-white/80 dark:bg-gray-800/80 backdrop-blur-md
-         border border-gray-200 dark:border-gray-700
-         rounded-full p-2 shadow-lg cursor-pointer
-         hover:bg-white dark:hover:bg-gray-800
-         transition-all duration-200;
+         inline-flex cursor-pointer items-center justify-center gap-2
+         font-display font-normal tracking-[-0.02em] transition-colors
+         border border-line bg-surface text-fg-secondary hover:bg-surface-hover
+         dark:border-line-dark dark:bg-surface-dark dark:text-fg-secondary-dark dark:hover:bg-surface-hover-dark
+         rounded-full p-2 shadow-lg;
 }
 
-/* Conversation sidebar active item */
-.pg-sidebar-active {
-  @apply bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-indigo-500;
-}
 
-.pg-input-container {
-  transition: all 0.2s ease;
-}
-
-.pg-input-container:focus-within {
-  background: rgba(255,255,255,0.9);
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
-}
-
-/* Login card — animated shimmer border */
-.card-login-shimmer {
-  position: relative;
-}
-.card-login-shimmer::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--color-primary) 50%, transparent) 40%,
-    color-mix(in srgb, #7c3aed 40%, transparent) 60%,
-    transparent 100%
-  );
-  background-size: 200% auto;
-  animation: shimmer 3s linear infinite;
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-  opacity: 0.6;
+/* Respect the OS "reduce motion" setting: no slides, fades, blinking or smooth scrolling. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

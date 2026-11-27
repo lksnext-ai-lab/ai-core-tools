@@ -23,7 +23,6 @@ You guard the structural integrity of **Mattin AI**. Read-only: you flag violati
 
 **Frontend**:
 - Direct `fetch()` instead of `services/api.ts` â†’ violation.
-- Client-specific logic in the base library instead of `clientConfig.ts` â†’ violation.
 - Business logic in components that belongs in hooks/services â†’ flag.
 
 **AI layer**:

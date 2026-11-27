@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useFormState } from '../../hooks/useFormState';
 import { FormField } from '../ui/FormField';
-import { FormError } from '../ui/FormError';
+import Alert from '../ui/Alert';
 import { FormActions } from '../ui/FormActions';
 
 interface App {
@@ -19,6 +20,7 @@ interface AppFormProps {
 }
 
 function AppForm({ app, onSubmit, onCancel }: AppFormProps) {
+  const { t } = useTranslation('common');
   const isEditing = !!app;
   
   // Use shared form state hook
@@ -36,7 +38,7 @@ function AppForm({ app, onSubmit, onCancel }: AppFormProps) {
   // Validation
   const validate = () => {
     if (!formData.name.trim()) {
-      setError('App name is required');
+      setError(t('appForm.nameRequired'));
       return false;
     }
     return true;
@@ -50,31 +52,31 @@ function AppForm({ app, onSubmit, onCancel }: AppFormProps) {
       await onSubmit({ 
         name: formData.name.trim()
       });
-    }, 'Failed to save app');
+    }, t('appForm.saveFailed'));
   };
 
   return (
     <form onSubmit={onFormSubmit} className="space-y-4">
       {/* App Name Field */}
       <FormField
-        label="App Name"
+        label={t('appForm.name')}
         id="app-name"
         type="text"
         value={formData.name}
         onChange={(e) => updateField('name', e.target.value)}
-        placeholder="Enter app name"
+        placeholder={t('appForm.namePlaceholder')}
         disabled={isSubmitting}
         required
       />
 
       {/* Error Message */}
-      <FormError error={error} />
+      {error && <Alert type="error" message={error} />}
 
       {/* Action Buttons */}
       <FormActions
         onCancel={onCancel}
         isSubmitting={isSubmitting}
-        submitLabel={isEditing ? 'Update App' : 'Create App'}
+        submitLabel={isEditing ? t('appForm.update') : t('appsPage.createApp')}
       />
     </form>
   );

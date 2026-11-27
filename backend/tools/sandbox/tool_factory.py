@@ -22,6 +22,7 @@ from utils.logger import get_logger
 
 from .provider import SandboxProvider, SandboxHandle, SandboxExpiredError
 from .builtin_tools import create_sandbox_builtin_tools
+from .chat_guard import ChatSandboxLimits, redacted_logs
 
 logger = get_logger(__name__)
 
@@ -134,6 +135,7 @@ def create_sandbox_repl_tool(
     *,
     session_key: str | None = None,
     session_service: Any | None = None,
+    chat_limits: ChatSandboxLimits | None = None,
 ):
     """Return a language-specific REPL LangChain tool bound to *handle* and *provider*.
 
@@ -215,6 +217,13 @@ def create_sandbox_repl_tool(
         if session_service is None or session_key is None:
             return False
         try:
+            if getattr(handle, "_is_lazy_sandbox_proxy", False) is True:
+                # Recover THROUGH the lazy proxy: owner, conversation, persisted state, input push, skill
+                # re-activation, the turn lease and the final output pull all follow the new handle.
+                handle.invalidate()
+                handle.get()
+                logger.info("Recovered sandbox session %s through the lazy handle", session_key)
+                return True
             session_service.evict(session_key)
             handle = session_service.get_or_create(
                 session_key,
@@ -228,19 +237,30 @@ def create_sandbox_repl_tool(
             )
             return True
         except Exception as exc:
-            logger.warning(
-                "Failed to recreate sandbox session %s after expiry: %s",
-                session_key,
-                exc,
-                exc_info=True,
-            )
+            if chat_limits is not None:  # Chat: class name + session key only
+                logger.warning(
+                    "Failed to recreate sandbox session %s after expiry (%s)", session_key, type(exc).__name__
+                )
+            else:
+                logger.warning(
+                    "Failed to recreate sandbox session %s after expiry: %s",
+                    session_key,
+                    exc,
+                    exc_info=True,
+                )
             return False
 
     def _repl_fn(code: str) -> str:
         nonlocal handle
-        _budget["count"] += 1
-        max_executions: int = settings.SANDBOX_MAX_EXECUTIONS_PER_TURN
-        if _budget["count"] > max_executions:
+        if chat_limits is not None:
+            # Chat: ONE budget shared with Bash.
+            max_executions: int = chat_limits.max_executions
+            within_budget = chat_limits.consume()
+        else:
+            _budget["count"] += 1
+            max_executions = settings.SANDBOX_MAX_EXECUTIONS_PER_TURN
+            within_budget = _budget["count"] <= max_executions
+        if not within_budget:
             return (
                 f"[Execution budget exceeded: {max_executions} executions per turn]"
             )
@@ -260,13 +280,14 @@ def create_sandbox_repl_tool(
                 except Exception:
                     lease_acquired = False
             try:
-                return provider.run_code(
-                    handle,
-                    code,
-                    language=language,
-                    on_stdout=lambda line: _emit_code_output(stream_writer, "stdout", line),
-                    on_stderr=lambda line: _emit_code_output(stream_writer, "stderr", line),
-                )
+                with redacted_logs(chat_limits is not None):
+                    return provider.run_code(
+                        handle,
+                        code,
+                        language=language,
+                        on_stdout=lambda line: _emit_code_output(stream_writer, "stdout", line),
+                        on_stderr=lambda line: _emit_code_output(stream_writer, "stderr", line),
+                    )
             except SandboxExpiredError:
                 if attempt == 0 and _recreate_stale_handle():
                     continue
@@ -294,13 +315,19 @@ def create_sandbox_repl_tool(
                 # instead of a normal, LLM-visible tool error. Mirrors
                 # builtin_tools.py's `_run_bash` catch-all for the same
                 # class of failure on the other sandbox tool family.
-                logger.error(
-                    "Sandbox tool '%s' failed unexpectedly (session=%s): %s",
-                    tool_name,
-                    session_key,
-                    exc,
-                    exc_info=True,
-                )
+                if chat_limits is not None:  # Chat: never the provider's text or traceback message
+                    logger.error(
+                        "Sandbox tool '%s' failed unexpectedly (session=%s, %s)",
+                        tool_name, session_key, type(exc).__name__,
+                    )
+                else:
+                    logger.error(
+                        "Sandbox tool '%s' failed unexpectedly (session=%s): %s",
+                        tool_name,
+                        session_key,
+                        exc,
+                        exc_info=True,
+                    )
                 return (
                     "[Error] Code execution sandbox is currently unavailable. "
                     "Please try again later."
@@ -328,6 +355,7 @@ def create_sandbox_repl_tools(
     *,
     session_key: str | None = None,
     session_service: Any | None = None,
+    chat_limits: ChatSandboxLimits | None = None,
 ) -> list:
     """Return one REPL tool per language supported by *provider*.
 
@@ -352,6 +380,7 @@ def create_sandbox_repl_tools(
             lang,
             session_key=session_key,
             session_service=session_service,
+            chat_limits=chat_limits,
         )
         for lang in provider.get_supported_languages()
     ]

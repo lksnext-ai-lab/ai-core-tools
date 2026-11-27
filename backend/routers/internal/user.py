@@ -1,16 +1,27 @@
 """
 User endpoints for getting current user information.
 """
+from datetime import datetime
 from typing import Annotated, List, Optional
-from fastapi import APIRouter, HTTPException, status, Depends, Query
+from fastapi import APIRouter, HTTPException, status, Depends, Query, UploadFile, File, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from lks_idprovider.models.auth import AuthContext
 from db.database import get_db
+from models.user import User
 from services.user_service import UserService
+from services.stored_image_service import StoredImageService
 from utils.config import is_omniadmin
 from utils.logger import get_logger
 from .auth_utils import get_current_user_oauth
+from .stored_image_endpoints import (
+    IMAGE_GET_RESPONSES,
+    IMAGE_UPLOAD_DESCRIPTION,
+    ImageUpdatedResponse,
+    delete_image,
+    image_response,
+    store_uploaded_image,
+)
 
 logger = get_logger(__name__)
 
@@ -24,6 +35,15 @@ class CurrentUserResponse(BaseModel):
     name: str
     is_admin: bool
     platform_role: str
+    # Version of the profile picture (GET /me/avatar); null = no picture, show initials.
+    avatar_updated_at: Optional[datetime] = None
+
+
+def _get_db_user(auth_context: AuthContext, db: Session) -> User:
+    user = UserService.get_user_by_email(db, auth_context.identity.email)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found in database")
+    return user
 
 
 @router.get(
@@ -65,7 +85,53 @@ async def get_current_user(
         name=user.name or "",
         is_admin=is_omniadmin(user.email),
         platform_role=user.platform_role or 'editor',
+        avatar_updated_at=StoredImageService.user_avatars(db).get_updated_at(user.user_id),
     )
+
+
+@router.get(
+    "/me/avatar",
+    summary="Get my profile picture",
+    description="Pass `v` (the `avatar_updated_at` of /me) to get a response the browser may cache.",
+    response_class=Response,
+    responses=IMAGE_GET_RESPONSES,
+)
+async def get_my_avatar(
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    v: Annotated[Optional[str], Query(max_length=64)] = None,
+):
+    user = _get_db_user(auth_context, db)
+    return image_response(StoredImageService.user_avatars(db), user.user_id, v)
+
+
+@router.put(
+    "/me/avatar",
+    response_model=ImageUpdatedResponse,
+    summary="Upload my profile picture",
+    description=IMAGE_UPLOAD_DESCRIPTION,
+)
+async def upload_my_avatar(
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+    file: Annotated[UploadFile, File(...)],
+):
+    user = _get_db_user(auth_context, db)
+    updated_at = await store_uploaded_image(StoredImageService.user_avatars(db), user.user_id, file)
+    return ImageUpdatedResponse(image_updated_at=updated_at)
+
+
+@router.delete(
+    "/me/avatar",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove my profile picture",
+)
+async def delete_my_avatar(
+    auth_context: Annotated[AuthContext, Depends(get_current_user_oauth)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    user = _get_db_user(auth_context, db)
+    return delete_image(StoredImageService.user_avatars(db), user.user_id)
 
 
 class UserSearchResultItem(BaseModel):

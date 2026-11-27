@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Globe, Link2, Pencil, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Globe, Link2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Alert from '../components/ui/Alert';
@@ -10,7 +11,11 @@ import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
+import { Title } from '../components/ui/Title';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import { ButtonApp } from '../components/ui/ButtonApp';
+import { LoadingState } from '../components/ui/LoadingState';
 
 interface Domain {
   domain_id: number;
@@ -24,6 +29,7 @@ interface Domain {
 
 function DomainsPage() {
   const { appId } = useParams<{ appId: string }>();
+  const { t, i18n } = useTranslation('common');
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
   const confirm = useConfirm();
@@ -49,7 +55,7 @@ function DomainsPage() {
       setDomains(response || []); // Response is the array directly, not response.data
     } catch (err) {
       console.error('Error loading domains:', err);
-      setError('Failed to load domains');
+      setError(t('domainsPage.loadFailed'));
       setDomains([]); // Ensure domains is always an array
     } finally {
       setLoading(false);
@@ -60,19 +66,19 @@ function DomainsPage() {
     if (!appId) return;
 
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('domain'),
-      message: `Are you sure you want to delete "${domain.name}"? This action cannot be undone and will remove all associated URLs and indexed content.`,
+      title: t('domainsPage.confirmDeleteTitle'),
+      message: t('domainsPage.confirmDeleteMessage', { name: domain.name }),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('domainsPage.actions.delete'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteDomain(Number.parseInt(appId), domain.domain_id),
       {
-        loading: MESSAGES.DELETING('domain'),
-        success: MESSAGES.DELETED('domain'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('domain')),
+        loading: t('domainsPage.deleting'),
+        success: t('domainsPage.deleted'),
+        error: (err) => errorMessage(err, t('domainsPage.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -81,21 +87,15 @@ function DomainsPage() {
   }
 
   if (loading) {
-    return (
+    return(
       <div className="space-y-6">
-        {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Domains</h1>
-            <p className="text-gray-600">Web scraping domains for content extraction</p>
+          {/* Page Header */}
+          <div className="flex items-center justify-between">
+            <Title variant="titSecundario" titulo={t('domainsPage.title')} subtitulo={t('domainsPage.subtitle')} titleMarginBottom={0} subtitleMarginBottom={0} />
           </div>
-        </div>
 
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-          <span className="ml-2">Loading domains...</span>
+          <LoadingState variant="page" message={t('domainsPage.loading')} />
         </div>
-      </div>
     );
   }
 
@@ -104,15 +104,12 @@ function DomainsPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Domains</h1>
-            <p className="text-gray-600">Web scraping domains for content extraction</p>
-          </div>
+          <Title variant="titSecundario" titulo={t('domainsPage.title')} subtitulo={t('domainsPage.subtitle')} titleMarginBottom={0} subtitleMarginBottom={0} />
         </div>
 
         <Alert 
           type="error" 
-          title="Error Loading Domains" 
+          title={t('domainsPage.loadErrorTitle')}
           message={error}
           onDismiss={() => loadDomains()}
         />
@@ -124,18 +121,15 @@ function DomainsPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Domains</h1>
-          <p className="text-gray-600">Web scraping domains for content extraction</p>
-        </div>
+        <Title variant="titSecundario" titulo={t('domainsPage.title')} subtitulo={t('domainsPage.subtitle')} titleMarginBottom={0} subtitleMarginBottom={0} />
         {canEdit && (
-          <button
+          <ButtonApp
+            label={t('domainsPage.actions.create')}
+            variant="primary"
+            size="medium"
+            icon={<Plus className="w-4 h-4" />}
             onClick={() => navigate(`/apps/${appId}/domains/new`)}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center"
-          >
-            <span className="mr-2">+</span>
-            {' '}Create Domain
-          </button>
+          />
         )}
       </div>
 
@@ -144,74 +138,71 @@ function DomainsPage() {
       {/* Domains List */}
       <Table
         data={domains || []}
+        stickyEdgeColumns
         keyExtractor={(domain) => domain.domain_id.toString()}
         columns={[
           {
-            header: 'Name',
+            header: t('domainsPage.columns.name'),
             render: (domain) => (
               <div className="flex items-center">
-                <div className="flex-shrink-0 h-10 w-10">
-                  <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                    <Globe className="w-5 h-5 text-purple-600" />
-                  </div>
-                </div>
+                <BackgroundImage icon={Globe} size={34} iconSize={17} variant="marron" />
                 <div className="ml-4">
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium text-fg dark:text-fg-dark">
                     {canEdit ? (
                       <Link
                         to={`/apps/${appId}/domains/${domain.domain_id}`}
-                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                        className="text-sm font-medium text-fg dark:text-fg-dark transition-colors"
                       >
                         {domain.name}
                       </Link>
                     ) : (
-                      <span className="text-sm font-medium text-gray-900">
+                      <span className="text-sm font-medium text-fg dark:text-fg-dark">
                         {domain.name}
                       </span>
                     )}
                   </div>
-                  <div className="text-sm text-gray-500">{domain.description}</div>
+                  <div className="text-xs text-fg-secondary dark:text-fg-secondary-dark">{domain.description}</div>
                 </div>
               </div>
             )
           },
           {
-            header: 'Base URL',
+            header: t('domainsPage.columns.baseUrl'),
             accessor: 'base_url',
-            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
-            header: 'URLs',
-            render: (domain) => `${domain.url_count} URLs`,
-            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+            header: t('domainsPage.columns.urls'),
+            render: (domain) => t('domainsPage.urlCount', { count: domain.url_count }),
+            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
-            header: 'Created',
-            render: (domain) => new Date(domain.created_at).toLocaleDateString(),
-            className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+            header: t('domainsPage.columns.created'),
+            render: (domain) => new Date(domain.created_at).toLocaleDateString(i18n.resolvedLanguage),
+            className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
           },
           {
-            header: 'Actions',
-            headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
+            header: t('domainsPage.columns.actions'),
+            headerClassName: 'px-6 py-3 text-right  tracking-wider',
             className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium relative',
             render: (domain) => (
               <ActionDropdown
                 actions={[
                   {
-                    label: 'URLs',
+                    label: t('domainsPage.actions.urls'),
                     onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}/detail`),
                     icon: <Link2 className="w-4 h-4" />,
                     variant: 'warning'
                   },
                   ...(canEdit ? [
                     {
-                      label: 'Edit',
+                      label: t('domainsPage.actions.edit'),
                       onClick: () => navigate(`/apps/${appId}/domains/${domain.domain_id}`),
                       icon: <Pencil className="w-4 h-4" />,
                       variant: 'primary' as const
                     },
                     {
-                      label: 'Delete',
+                      label: t('domainsPage.actions.delete'),
                       onClick: () => { void handleDeleteDomain(domain); },
                       icon: <Trash2 className="w-4 h-4" />,
                       variant: 'danger' as const
@@ -223,20 +214,20 @@ function DomainsPage() {
             )
           }
         ]}
-        emptyIcon={<Globe className="w-10 h-10 text-gray-300" />}
-        emptyMessage="No Domains Yet"
-        emptySubMessage="Create your first domain to start extracting content from websites."
+        emptyIcon={<BackgroundImage icon={Globe} size={64} iconSize={32} />}
+        emptyMessage={t('domainsPage.emptyTitle')}
+        emptySubMessage={t('domainsPage.emptyDescription')}
         loading={loading}
       />
 
       {!loading && (!domains || domains.length === 0) && canEdit && (
         <div className="text-center py-6">
-          <button
+          <ButtonApp
+            label={t('domainsPage.actions.createFirst')}
+            variant="primary"
+            size="medium"
             onClick={() => navigate(`/apps/${appId}/domains/new`)}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg"
-          >
-            Create Your First Domain
-          </button>
+          />
         </div>
       )}
     </div>

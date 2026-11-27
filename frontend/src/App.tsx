@@ -16,9 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ExtensibleBaseApp } from './core/ExtensibleBaseApp';
+import { AppRoot } from './core/AppRoot';
 import { baseTheme } from './themes/baseTheme';
-import type { LibraryConfig } from './core/types';
+import type { AppConfig } from './core/AppConfig';
 
 // Get runtime configuration injected by container at startup
 // Falls back to build-time environment variables for local development
@@ -33,11 +33,16 @@ const getConfig = (key: string, fallback: string = ''): string => {
   return runtimeConfig?.[key] || import.meta.env[key] || fallback;
 };
 
-const demoConfig: LibraryConfig = {
+const appConfig: AppConfig = {
   name: 'Mattin AI',
   logo: '/mattin-small.png',
   favicon: '/favicon.ico',
-  
+
+  // Client organization chip in the header — hidden unless VITE_ORGANIZATION_NAME is set
+  organization: getConfig('VITE_ORGANIZATION_NAME')
+    ? { name: getConfig('VITE_ORGANIZATION_NAME'), logo: getConfig('VITE_ORGANIZATION_LOGO') || undefined }
+    : undefined,
+
   themeProps: {
     defaultTheme: 'base',
     customThemes: {
@@ -80,12 +85,7 @@ const demoConfig: LibraryConfig = {
 };
 
 function App() {
-  return (
-    <ExtensibleBaseApp 
-      config={demoConfig}
-      extraRoutes={[]}
-    />
-  );
+  return <AppRoot config={appConfig} />;
 }
 
 export default App;

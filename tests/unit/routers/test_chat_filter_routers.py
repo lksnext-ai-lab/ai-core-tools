@@ -32,7 +32,7 @@ class TestInternalAgentChatFilters:
         )
 
         assert result == {"fields": [{"name": "empresa"}]}
-        service.get_available_chat_filter_fields.assert_called_once_with(db, [4, 5], 2)
+        service.get_available_chat_filter_fields.assert_called_once_with(db, [4, 5], 2, app_id=1)
 
     @pytest.mark.asyncio
     async def test_filter_values_are_scoped_to_the_app_agent(self, agent_lookup):

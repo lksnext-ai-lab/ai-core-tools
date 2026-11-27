@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { AlertTriangle, Upload, Database, Gamepad2, ArrowDownToLine, Pencil, Trash2 } from 'lucide-react';
+import { Upload, Database, Gamepad2, ArrowDownToLine, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import ActionDropdown from '../components/ui/ActionDropdown';
 import Table from '../components/ui/Table';
+import { Badge } from '../components/ui/Badge';
 import { useAppRole } from '../hooks/useAppRole';
 import { AppRole } from '../types/roles';
 import ReadOnlyBanner from '../components/ui/ReadOnlyBanner';
@@ -12,7 +14,13 @@ import ImportModal, { type ConflictMode, type ImportResponse } from '../componen
 import type { ServiceOptionLike } from '../utils/serviceLifecycle';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useApiMutation } from '../hooks/useApiMutation';
-import { MESSAGES, errorMessage } from '../constants/messages';
+import { errorMessage } from '../constants/messages';
+import Title from '../components/ui/Title';
+import ButtonApp from '../components/ui/ButtonApp';
+import Alert from '../components/ui/Alert';
+import ButtonLink from '../components/ui/ButtonLink';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import { LoadingState } from '../components/ui/LoadingState';
 import type { ServiceLifecycleWarning } from '../types/services';
 import ServiceLifecycleAlert from '../components/services/ServiceLifecycleAlert';
 
@@ -29,6 +37,7 @@ interface Silo {
 }
 
 function SilosPage() {
+  const { t, i18n } = useTranslation('common');
   const { appId } = useParams();
   const { hasMinRole, userRole } = useAppRole(appId);
   const canEdit = hasMinRole(AppRole.EDITOR);
@@ -58,7 +67,7 @@ function SilosPage() {
       const response = await apiService.getSilos(Number.parseInt(appId));
       setSilos(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load silos');
+      setError(err instanceof Error ? err.message : t('silosPage.loadFailed'));
       console.error('Error loading silos:', err);
     } finally {
       setLoading(false);
@@ -70,21 +79,21 @@ function SilosPage() {
 
     const target = silos.find((s) => s.silo_id === siloId);
     const ok = await confirm({
-      title: MESSAGES.CONFIRM_DELETE_TITLE('silo'),
+      title: t('silosPage.confirmDeleteTitle'),
       message: target
-        ? `Are you sure you want to delete "${target.name}"? This action cannot be undone and removes all stored vectors.`
-        : MESSAGES.CONFIRM_DELETE_MESSAGE('silo'),
+        ? t('silosPage.confirmDeleteMessage', { name: target.name })
+        : t('silosPage.confirmDeleteFallback'),
       variant: 'danger',
-      confirmLabel: 'Delete',
+      confirmLabel: t('silosPage.actions.delete'),
     });
     if (!ok) return;
 
     const result = await mutate(
       () => apiService.deleteSilo(Number.parseInt(appId), siloId),
       {
-        loading: MESSAGES.DELETING('silo'),
-        success: MESSAGES.DELETED('silo'),
-        error: (err) => errorMessage(err, MESSAGES.DELETE_FAILED('silo')),
+        loading: t('silosPage.deleting'),
+        success: t('silosPage.deleted'),
+        error: (err) => errorMessage(err, t('silosPage.deleteFailed')),
       },
     );
     if (result === undefined) return;
@@ -116,12 +125,9 @@ function SilosPage() {
       globalThis.URL.revokeObjectURL(url);
       a.remove();
 
-      toast.warning(
-        'Silo exported successfully. Note: Vector data excluded. Re-upload documents after import.',
-        { duration: 7000 },
-      );
+      toast.warning(t('silosPage.exported'), { duration: 7000 });
     } catch (err) {
-      toast.error(errorMessage(err, MESSAGES.EXPORT_FAILED('silo')));
+      toast.error(errorMessage(err, t('silosPage.exportFailed')));
       console.error('Error exporting silo:', err);
     }
   }
@@ -132,7 +138,7 @@ function SilosPage() {
     newName?: string
   ): Promise<ImportResponse> {
     if (!appId) {
-      throw new Error('App ID is required');
+      throw new Error(t('silosPage.appIdRequired'));
     }
 
     try {
@@ -150,7 +156,7 @@ function SilosPage() {
           
           return {
             success: false,
-            message: 'Please select an embedding service to continue',
+            message: t('silosPage.selectEmbeddingService'),
           };
         }
       }
@@ -166,7 +172,7 @@ function SilosPage() {
 
       if (result.success) {
         setShowImportModal(false);
-        toast.success(result.message || MESSAGES.IMPORTED('silo'));
+        toast.success(result.message || t('silosPage.imported'));
         void loadSilos();
 
         // Reset embedding service selection state
@@ -178,7 +184,7 @@ function SilosPage() {
     } catch (err: any) {
       return {
         success: false,
-        message: err?.message || 'Import failed',
+        message: err?.message || t('silosPage.importFailed'),
       };
     }
   } 
@@ -188,16 +194,10 @@ function SilosPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Silos</h1>
-            <p className="text-gray-600">Vector storage and retrieval systems for semantic search</p>
-          </div>
+          <Title variant='titSecundario' titulo={t('silosPage.title')} subtitulo={t('silosPage.subtitle')}></Title>
         </div>
 
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600"></div>
-          <span className="ml-2">Loading silos...</span>
-        </div>
+        <LoadingState variant="page" message={t('silosPage.loading')} />
       </div>
     );
   }
@@ -207,27 +207,21 @@ function SilosPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Silos</h1>
-            <p className="text-gray-600">Vector storage and retrieval systems for semantic search</p>
-          </div>
+          <Title variant='titSecundario' titulo={t('silosPage.title')} subtitulo={t('silosPage.subtitle')}></Title>
         </div>
 
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <AlertTriangle className="w-5 h-5 text-red-400 mr-3 shrink-0" />
-            <div>
-              <h3 className="text-sm font-medium text-red-800">Error Loading Silos</h3>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
-              <button 
-                onClick={() => loadSilos()}
-                className="mt-2 text-sm text-red-800 hover:text-red-900 underline"
-              >
-                Try again
+        <Alert
+          type="error"
+          title={t('silosPage.loadErrorTitle')}
+          message={(
+            <>
+              {error}
+              <button type="button" onClick={() => loadSilos()} className="mt-2 block underline">
+                {t('silosPage.retry')}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        />
       </div>
     );
   }
@@ -236,77 +230,56 @@ function SilosPage() {
     <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Silos</h1>
-          <p className="text-gray-600">Vector storage and retrieval systems for semantic search</p>
-        </div>
+        <Title variant='titSecundario' titulo={t('silosPage.title')} subtitulo={t('silosPage.subtitle')}></Title>
         <div className="flex items-center space-x-3">
           {hasMinRole(AppRole.ADMINISTRATOR) && (
-            <button
+            <ButtonApp
+              label={t('silosPage.importSilo')}
+              icon={<Upload className="w-4 h-4" />}
               onClick={() => setShowImportModal(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              <span>Import Silo</span>
-            </button>
+              variant="secondary"
+              size="medium"
+            />
           )}
           {canEdit && (
-            <Link 
+            <ButtonLink
               to={`/apps/${appId}/silos/new`}
-              className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg flex items-center"
-            >
-              <span aria-hidden="true" className="mr-2">+</span>
-              <span>Create Silo</span>
-            </Link>
+              label={t('silosPage.createSilo')}
+              variant="primary"
+              size="medium"
+              icon={<span aria-hidden="true">+</span>}
+            />
           )}
         </div>
       </div>
 
       {!canEdit && <ReadOnlyBanner userRole={userRole} minRole={AppRole.EDITOR} />}
-
       {/* Silos List */}
-      {silos.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-md border p-8 text-center">
-          <Database className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Silos Yet</h3>
-          <p className="text-gray-600 mb-4">
-            Create your first silo to start storing and searching documents with vector embeddings.
-          </p>
-          {canEdit && (
-            <Link 
-              to={`/apps/${appId}/silos/new`}
-              className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-lg inline-flex items-center"
-            >
-              <span aria-hidden="true" className="mr-2">+</span>
-              <span>Create Your First Silo</span>
-            </Link>
-          )}
-        </div>
-      ) : (
-        <Table
+      <Table
           data={silos}
+          stickyEdgeColumns
           keyExtractor={(silo) => silo.silo_id.toString()}
           columns={[
             {
-              header: 'Name',
+              header: t('silosPage.columns.name'),
               render: (silo) => (
                 <div className="flex items-center">
                   <div className="flex-shrink-0 h-10 w-10">
-                    <div className="h-10 w-10 rounded-lg bg-yellow-100 flex items-center justify-center">
-                      <Database className="w-5 h-5 text-yellow-600" />
-                    </div>
+                    <BackgroundImage variant="marron" icon={Database} size={34}
+                      iconSize={17}
+                      className="rounded-lg"/>
                   </div>
                   <div className="ml-4">
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-medium text-fg dark:text-fg-dark">
                       {canEdit ? (
                         <Link
                           to={`/apps/${appId}/silos/${silo.silo_id}`}
-                          className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                          className="text-sm font-medium text-fg dark:text-fg-dark"
                         >
                           {silo.name}
                         </Link>
                       ) : (
-                        <span className="text-sm font-medium text-gray-900">
+                        <span className="text-sm font-medium text-fg dark:text-fg-dark">
                           {silo.name}
                         </span>
                       )}
@@ -317,62 +290,58 @@ function SilosPage() {
               )
             },
             {
-              header: 'Description',
+              header: t('silosPage.columns.description'),
               accessor: 'description',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+              className: 'px-6 py-4 whitespace-nowrap text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
-              header: 'Type',
-              render: (silo) => (
-                <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                  {silo.type || 'Custom'}
-                </span>
-              )
+              header: t('silosPage.columns.type'),
+              render: (silo) => <Badge label={silo.type || t('silosPage.custom')} variant="default" />
             },
             {
-              header: 'Vector DB',
+              header: t('silosPage.columns.vectorDb'),
               accessor: 'vector_db_type',
-              render: (silo) => silo.vector_db_type || 'Unknown',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+              render: (silo) => silo.vector_db_type || t('silosPage.unknown'),
+              className: "text-xs text-fg-secondary dark:text-fg-secondary-dark"
             },
             {
-              header: 'Documents',
-              render: (silo) => `${silo.docs_count} documents`,
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-900'
+              header: t('silosPage.columns.documents'),
+              render: (silo) => t('silosPage.documentCount', { count: silo.docs_count }),
+              className: 'text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
-              header: 'Created',
-              render: (silo) => silo.created_at ? new Date(silo.created_at).toLocaleDateString() : 'N/A',
-              className: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500'
+              header: t('silosPage.columns.created'),
+              render: (silo) => silo.created_at ? new Date(silo.created_at).toLocaleDateString(i18n.language) : t('silosPage.notAvailable'),
+              className: 'text-xs text-fg-secondary dark:text-fg-secondary-dark'
             },
             {
-              header: 'Actions',
-              headerClassName: 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider',
-              className: 'px-6 py-4 whitespace-nowrap text-right text-sm font-medium',
+              header: t('silosPage.columns.actions'),
+              sticky: 'right',
+              className: 'text-xs text-fg-secondary dark:text-fg-secondary-dark',
               render: (silo) => (
                 <ActionDropdown
                   actions={[
                     {
-                      label: 'Playground',
+                      label: t('silosPage.actions.playground'),
                       onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}/playground`),
                       icon: <Gamepad2 className="w-4 h-4" />,
                       variant: 'warning'
                     },
                     {
-                      label: 'Export',
+                      label: t('silosPage.actions.export'),
                       onClick: () => { void handleExport(silo.silo_id); },
                       icon: <ArrowDownToLine className="w-4 h-4" />,
                       variant: 'primary' as const
                     },
                     ...(canEdit ? [
                       {
-                        label: 'Edit',
+                        label: t('silosPage.actions.edit'),
                         onClick: () => navigate(`/apps/${appId}/silos/${silo.silo_id}`),
                         icon: <Pencil className="w-4 h-4" />,
                         variant: 'primary' as const
                       },
                       {
-                        label: 'Delete',
+                        label: t('silosPage.actions.delete'),
                         onClick: () => { void handleDelete(silo.silo_id); },
                         icon: <Trash2 className="w-4 h-4" />,
                         variant: 'danger' as const
@@ -384,11 +353,22 @@ function SilosPage() {
               )
             }
           ]}
-          emptyIcon={<Database className="w-10 h-10 text-gray-300" />}
-          emptyMessage="No Silos Yet"
-          emptySubMessage="Create your first silo to start storing and searching documents with vector embeddings."
+          emptyIcon={<BackgroundImage icon={Database} size={64} iconSize={32} />}
+          emptyMessage={t('silosPage.emptyTitle')}
+          emptySubMessage={t('silosPage.emptyDescription')}
           loading={loading}
-        />
+      />
+
+      {!loading && canEdit && silos.length === 0 && (
+        <div className="text-center py-6">
+          <ButtonLink
+            to={`/apps/${appId}/silos/new`}
+            label={t('silosPage.createFirst')}
+            variant="primary"
+            size="medium"
+            icon={<span aria-hidden="true">+</span>}
+          />
+        </div>
       )}
 
       {/* Import Modal */}
@@ -401,7 +381,7 @@ function SilosPage() {
         }}
         onImport={handleImport}
         componentType="silo"
-        componentLabel="Silo"
+        componentLabel={t('silosPage.silo')}
         requiresEmbeddingServiceSelection={requiresEmbeddingServiceSelection}
         availableEmbeddingServices={availableEmbeddingServices}
         selectedEmbeddingServiceId={selectedEmbeddingServiceId}

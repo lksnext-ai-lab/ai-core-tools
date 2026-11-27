@@ -6,7 +6,7 @@ interface SettingsLayoutProps {
 
 function SettingsLayout({ children }: SettingsLayoutProps) {
   return (
-    <div className="bg-white rounded-lg">
+    <div >
       {children}
     </div>
   );

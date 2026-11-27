@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StepperContainer } from '../ui/Stepper';
+import Modal from '../ui/Modal';
 import type { StepDefinition, StepStatus } from '../ui/Stepper';
 import type {
   AppImportPreview,
@@ -15,16 +16,7 @@ import AppStepApiKeys from './steps/AppStepApiKeys';
 import AppStepConflicts from './steps/AppStepConflicts';
 import AppStepReview from './steps/AppStepReview';
 import AppStepResult from './steps/AppStepResult';
-
-const STEPS: StepDefinition[] = [
-  { id: 'upload', label: 'Upload' },
-  { id: 'config', label: 'App Config' },
-  { id: 'select', label: 'Components' },
-  { id: 'apikeys', label: 'API Keys', optional: true },
-  { id: 'conflicts', label: 'Conflicts', optional: true },
-  { id: 'review', label: 'Review' },
-  { id: 'result', label: 'Result' },
-];
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   isOpen: boolean;
@@ -42,6 +34,25 @@ function AppImportStepper({
   onImportComplete,
 }: Readonly<Props>) {
   const navigate = useNavigate();
+  const { t } = useTranslation('common');
+
+  const steps: StepDefinition[] = [
+    { id: 'upload', label: t('importModal.appSteps.upload') },
+    { id: 'config', label: t('importModal.appSteps.config') },
+    { id: 'select', label: t('importModal.appSteps.components') },
+    {
+      id: 'apikeys',
+      label: t('importModal.appSteps.apiKeys'),
+      optional: true,
+    },
+    {
+      id: 'conflicts',
+      label: t('importModal.appSteps.conflicts'),
+      optional: true,
+    },
+    { id: 'review', label: t('importModal.appSteps.review') },
+    { id: 'result', label: t('importModal.appSteps.result') },
+  ];
 
   // Step state
   const [currentStep, setCurrentStep] = useState(0);
@@ -148,13 +159,15 @@ function AppImportStepper({
         setSelection(sel);
       } catch (err: unknown) {
         setValidationError(
-          err instanceof Error ? err.message : 'Failed to validate export file'
+          err instanceof Error
+            ? err.message
+            : t('importModal.appUpload.validationFailed')
         );
       } finally {
         setIsValidating(false);
       }
     },
-    []
+    [t]
   );
 
   const hasServicesNeedingKeys = (): boolean => {
@@ -294,7 +307,9 @@ function AppImportStepper({
       }
     } catch (err: unknown) {
       setImportError(
-        err instanceof Error ? err.message : 'Import failed unexpectedly'
+        err instanceof Error
+          ? err.message
+          : t('importModal.errors.importFailed')
       );
       setStepStatuses((prev) => ({
         ...prev,
@@ -344,117 +359,104 @@ function AppImportStepper({
   const isFinalStep = currentStep === 6;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col">
-        {/* Header */}
-        <div className="px-6 pt-6 pb-2 border-b border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Import App
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="text-gray-400 hover:text-gray-600 text-xl leading-none"
-            >
-              &times;
-            </button>
-          </div>
-        </div>
-
-        {/* Body with Stepper */}
-        <div className="flex-1 min-h-0 flex flex-col px-6 py-4">
-          <StepperContainer
-            steps={STEPS}
-            currentStep={currentStep}
-            stepStatuses={stepStatuses}
-            onStepClick={handleStepClick}
-            onNext={handleNext}
-            onBack={handleBack}
-            onCancel={onClose}
-            nextDisabled={isNextDisabled()}
-            isSubmitting={isImporting}
-            showBack={!isFinalStep}
-            showNext={!isFinalStep}
-            nextLabel={
-              currentStep === 5
-                ? 'Confirm Import'
-                : undefined
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t('importModal.title', {
+        component: t('importModal.appUpload.components.apps', { count: 1 }),
+      })}
+      size="large"
+    >
+      <StepperContainer
+        steps={steps}
+        currentStep={currentStep}
+        stepStatuses={stepStatuses}
+        onStepClick={handleStepClick}
+        onNext={handleNext}
+        onBack={handleBack}
+        onCancel={onClose}
+        nextDisabled={isNextDisabled()}
+        isSubmitting={isImporting}
+        showBack={!isFinalStep}
+        showNext={!isFinalStep}
+        nextLabel={
+          currentStep === 5
+            ? t('importModal.actions.confirmImport')
+            : t('importModal.actions.next')
+        }
+        cancelLabel={
+          isFinalStep
+            ? t('importModal.actions.close')
+            : t('importModal.actions.cancel')
+        }
+        backLabel={t('importModal.actions.back')}
+        submittingLabel={t('importModal.appResult.importing')}
+      >
+        {currentStep === 0 && (
+          <AppStepUpload
+            file={file}
+            onFileSelect={handleFileSelect}
+            preview={preview}
+            isValidating={isValidating}
+            validationError={validationError}
+          />
+        )}
+        {currentStep === 1 && preview && (
+          <AppStepConfig
+            appName={appName}
+            onAppNameChange={setAppName}
+            hasConflict={hasAppConflict}
+            conflictMode={appConflictMode}
+            onConflictModeChange={setAppConflictMode}
+          />
+        )}
+        {currentStep === 2 && preview && (
+          <AppStepSelect
+            preview={preview}
+            selection={selection}
+            onSelectionChange={setSelection}
+          />
+        )}
+        {currentStep === 3 && preview && (
+          <AppStepApiKeys
+            preview={preview}
+            selection={selection}
+            apiKeys={apiKeys}
+            onApiKeyChange={handleApiKeyChange}
+          />
+        )}
+        {currentStep === 4 && (
+          <AppStepConflicts
+            hasConflicts={false}
+            conflictMode={componentConflictMode}
+            onConflictModeChange={setComponentConflictMode}
+          />
+        )}
+        {currentStep === 5 && preview && (
+          <AppStepReview
+            preview={preview}
+            appName={appName}
+            conflictMode={
+              hasAppConflict
+                ? appConflictMode
+                : componentConflictMode
             }
-            cancelLabel={
-              isFinalStep ? 'Close' : 'Cancel'
-            }
-          >
-            {currentStep === 0 && (
-              <AppStepUpload
-                file={file}
-                onFileSelect={handleFileSelect}
-                preview={preview}
-                isValidating={isValidating}
-                validationError={validationError}
-              />
-            )}
-            {currentStep === 1 && preview && (
-              <AppStepConfig
-                appName={appName}
-                onAppNameChange={setAppName}
-                hasConflict={hasAppConflict}
-                conflictMode={appConflictMode}
-                onConflictModeChange={setAppConflictMode}
-              />
-            )}
-            {currentStep === 2 && preview && (
-              <AppStepSelect
-                preview={preview}
-                selection={selection}
-                onSelectionChange={setSelection}
-              />
-            )}
-            {currentStep === 3 && preview && (
-              <AppStepApiKeys
-                preview={preview}
-                selection={selection}
-                apiKeys={apiKeys}
-                onApiKeyChange={handleApiKeyChange}
-              />
-            )}
-            {currentStep === 4 && (
-              <AppStepConflicts
-                hasConflicts={false}
-                conflictMode={componentConflictMode}
-                onConflictModeChange={
-                  setComponentConflictMode
-                }
-              />
-            )}
-            {currentStep === 5 && preview && (
-              <AppStepReview
-                preview={preview}
-                appName={appName}
-                conflictMode={
-                  hasAppConflict
-                    ? appConflictMode
-                    : componentConflictMode
-                }
-                selection={selection}
-                apiKeys={apiKeys}
-              />
-            )}
-            {currentStep === 6 && (
-              <AppStepResult
-                result={importResult}
-                isImporting={isImporting}
-                importError={importError}
-                onClose={onClose}
-                onOpenApp={handleOpenApp}
-                onRetry={handleRetry}
-              />
-            )}
-          </StepperContainer>
-        </div>
-      </div>
-    </div>
+            selection={selection}
+            apiKeys={apiKeys}
+          />
+        )}
+        {currentStep === 6 && (
+          <AppStepResult
+            result={importResult}
+            isImporting={isImporting}
+            importError={importError}
+            onClose={onClose}
+            onOpenApp={handleOpenApp}
+            onRetry={handleRetry}
+          />
+        )}
+      </StepperContainer>
+    </Modal>
   );
 }
 

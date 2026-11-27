@@ -62,6 +62,8 @@ Si vas a usar el code interpreter de los agentes, añade el perfil `opensandbox`
 (también se resuelve por `pull`, sin necesitar el código fuente de `docker/opensandbox/`):
 
 ```bash
+# Antes: OPENSANDBOX_API_KEY en .env (obligatoria; >= 32 caracteres):
+#   python -c "import secrets; print(secrets.token_hex(32))"
 docker compose --profile opensandbox pull opensandbox mattin-code-interpreter
 docker compose --profile opensandbox up -d
 ```
@@ -318,11 +320,14 @@ registry):
   docker run --rm -v "$PWD/../backend/data:/from" -v mattin-dev_backend-data:/to \
     alpine sh -c "cp -a /from/. /to/"
   ```
-- **OpenSandbox.** `opensandbox/sandbox.toml` fija el nombre de la red en
-  `network_mode`. El compose lo expone como `SANDBOX_NETWORK_NAME`, pero para
-  levantar el perfil `opensandbox` en más de un stack a la vez cada uno necesita
-  además su propia copia de `sandbox.toml`. Con un solo stack usándolo, nada
-  que hacer. Las imágenes `opensandbox-server` y `code-interpreter` siguen el
+- **OpenSandbox.** `opensandbox/sandbox.toml` es una plantilla: el entrypoint de
+  la imagen la renderiza con `OPENSANDBOX_API_KEY` (obligatoria; sin ella el
+  perfil `opensandbox` no arranca) y `SANDBOX_NETWORK_NAME` (nombre de la red de
+  sandboxes), así que para levantar el perfil en más de un stack a la vez basta
+  con un `SANDBOX_NETWORK_NAME` distinto por stack, sin copiar el toml. La API
+  solo escucha en la red `mattin-network`. Ver la sección "OpenSandbox:
+  exposición y mitigaciones" más abajo (riesgo aceptado: acceso entre sandboxes).
+  Las imágenes `opensandbox-server` y `code-interpreter` siguen el
   mismo `IMAGE_TAG` que backend/frontend (se publican en GHCR), así que la
   misma trampa de arriba ("`IMAGE_TAG` propio por entorno no es opcional")
   también les aplica.
@@ -432,3 +437,58 @@ En [`utilities/`](./utilities/) hay compose files para servicios aislados que no
 ## Para producción seria (K8s)
 
 Este despliegue es para **single-host**: dev local, POCs, pilotos, demos de cliente. Para producción con alta disponibilidad, múltiples réplicas, TLS automático con Let's Encrypt, backups gestionados, etc., usar los Helm charts en el repo `mattinai-infra`.
+
+## OpenSandbox: exposición y mitigaciones
+
+La API de control exige `OPENSANDBOX_API_KEY` (el perfil no arranca sin ella) y
+solo escucha en `mattin-network`; el código de un sandbox no puede alcanzarla
+(verificado, también con egress activo). Lo siguiente es **riesgo aceptado y
+documentado**, no cerrado:
+
+| | Modo por defecto (egress activo) | Modo hardened (sin egress) |
+|---|---|---|
+| Internet / `pip install` | Sí | No (los skills con `pip install` fallan) |
+| Servicios del host vía gateway del bridge (puertos publicados 5432/5433/80, cualquier listener en 0.0.0.0) | Alcanzables | No |
+| LAN / RFC1918 | Alcanzable | No |
+| Exec daemon (`:44772`, sin autenticación) de otros sandboxes | **Alcanzable** | **Alcanzable** |
+| API de control de OpenSandbox | No | No |
+| Docker mínimo | cualquiera | Engine >= 28 |
+
+Consecuencia: usuarios cuyo código corre en el mismo servidor OpenSandbox pueden
+leer/modificar los sandboxes de los demás. Cerrarlo requiere un cambio upstream
+(el exec daemon soporta `X-EXECD-ACCESS-TOKEN`, pero opensandbox-server 0.1.11 no
+lo configura). Arranque sin API key (solo desarrollo): `OPENSANDBOX_INSECURE_SERVER=YES` solo
+no basta (un `.env` antiguo lo traía): hace falta además `OPENSANDBOX_ALLOW_INSECURE_DEV=1`,
+y el servidor registra un ERROR en cada arranque. El nivel de log del servidor es
+`OPENSANDBOX_LOG_LEVEL` (INFO por defecto; DEBUG puede registrar payloads proxied).
+
+Nunca publiques el puerto 8080 de `opensandbox` en 0.0.0.0: verificado que un
+puerto publicado así es alcanzable desde un sandbox vía el gateway del bridge
+(en modo por defecto), y la ruta `/sandboxes/{id}/proxy/...` no exige API key.
+Un publish solo en `127.0.0.1` no fue alcanzable desde sandboxes.
+
+Mitigaciones recomendadas:
+
+1. **Modo hardened:** `docker compose -f docker-compose.yaml -f docker-compose.sandbox-hardened.yaml --profile opensandbox up -d`
+   (o `COMPOSE_FILE=docker-compose.yaml:docker-compose.sandbox-hardened.yaml` en `.env`).
+   Al cambiar de modo hay que recrear la red: `docker compose --profile opensandbox down` y volver a `up -d`.
+2. **Firewall del host (cadena `DOCKER-USER`)** si necesitas egress a internet.
+   Ejemplo (sustituye `SBX` por la subred de la red de sandboxes, p. ej.
+   `docker network inspect docker_sandbox-workloads -f '{{(index .IPAM.Config 0).Subnet}}'`;
+   las reglas no persisten al reiniciar, usa tu gestor de firewall):
+   ```bash
+   SBX=172.24.0.0/16
+   # NO EJECUTADO/PROBADO: ejemplo orientativo. `-I DOCKER-USER 2` (abajo) asume que
+   # la regla 1 es este ACCEPT, insertado justo antes; si cambias el orden, revisa los índices.
+   # permitir respuestas y tráfico dentro del propio bridge (server <-> sandboxes)
+   iptables -I DOCKER-USER -s $SBX -d $SBX -j ACCEPT
+   # bloquear sandbox -> RFC1918, CGNAT y link-local (LAN, otros bridges, metadata)
+   for N in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 169.254.0.0/16; do
+     iptables -I DOCKER-USER 2 -s $SBX -d $N -j DROP
+   done
+   # bloquear sandbox -> servicios del propio host (tráfico INPUT hacia el gateway del bridge)
+   iptables -I INPUT -s $SBX -j DROP
+   ```
+   El resto (internet) sigue permitido. No cierra el acceso entre sandboxes.
+3. **Un servidor OpenSandbox por límite de confianza** (cada uno con su
+   `SANDBOX_NETWORK_NAME`, p. ej. un stack por cliente/App sensible).

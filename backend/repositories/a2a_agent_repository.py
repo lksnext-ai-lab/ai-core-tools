@@ -32,7 +32,9 @@ def get_agent_for_app(db: Session, app_id: int, agent_id: int) -> Optional[Agent
     Returns `None` if the agent does not exist or belongs to a different app --
     the visibility service (step_011) treats both the same way (NFR-1/NFR-2).
     """
-    stmt = _eager_loaded_query().where(Agent.agent_id == agent_id, Agent.app_id == app_id)
+    stmt = _eager_loaded_query().where(
+        Agent.agent_id == agent_id, Agent.app_id == app_id, Agent.visible_clause()
+    )
     return db.execute(stmt).unique().scalar_one_or_none()
 
 
@@ -46,6 +48,7 @@ def list_enabled_agents_for_app(db: Session, app_id: int) -> List[Agent]:
         _eager_loaded_query()
         .where(
             Agent.app_id == app_id,
+            Agent.visible_clause(),
             Agent.a2a_enabled.is_(True),
             Agent.is_frozen.is_(False),
         )

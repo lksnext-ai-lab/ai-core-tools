@@ -1,138 +1,118 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, BarChart2, Info, AppWindow, Users } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useUser } from '../contexts/UserContext';
+import Title from '../components/ui/Title';
+import CardApp from '../components/ui/CardApp';
 
 function HomePage() {
   const { user } = useUser();
+  const { t } = useTranslation('common');
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">
-          Welcome to AI Core Tools
-        </h1>
-        <p className="text-lg text-gray-600">
-          {user?.name ? `Hello ${user.name}!` : 'Hello!'} Manage your AI applications, agents, and data sources from one central location.
-        </p>
-      </div>
+      <Title
+        variant="titPrincipal"
+        titulo={t('homePage.title')}
+        subtitulo={user?.name
+          ? t('homePage.subtitleWithName', { name: user.name })
+          : t('homePage.subtitle')}
+        titleMarginBottom={16}
+        subtitleMarginBottom={32}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         {/* Quick Actions */}
-        <div className="bg-white rounded-lg shadow-md border p-6">
-          <div className="flex items-center mb-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <AppWindow className="w-6 h-6" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 ml-4">My Apps</h3>
-          </div>
-          <p className="text-gray-600 text-sm mb-4">
-            View and manage all your AI applications in one place.
+        <CardApp className="p-6" icon={AppWindow} titulo={t('breadcrumbs.navigation.myApps')}>
+          <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm mb-4">
+            {t('homePage.appsDescription')}
           </p>
           <Link 
             to="/apps"
-            className="block w-full bg-blue-600 hover:bg-blue-700 text-white text-center py-2 px-4 rounded-lg transition-colors"
+            className="text-sm text-bronze  dark:text-bronze-dark inline-block"
           >
-            Go to Apps <ArrowRight className="w-4 h-4 inline-block ml-1" />
+            {t('homePage.goToApps')} <ArrowRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
+
           </Link>
-        </div>
+        </CardApp>
 
         {/* Administration */}
         {user?.is_admin && (
-          <div className="bg-white rounded-lg shadow-md border p-6">
-            <div className="flex items-center mb-4">
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <Users className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 ml-4">Users</h3>
-            </div>
-            <p className="text-gray-600 text-sm mb-4">
-              Manage user accounts and permissions.
+          <CardApp className="p-6" icon={Users} titulo={t('breadcrumbs.navigation.users')}>
+            <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm mb-4">
+              {t('homePage.usersDescription')}
             </p>
             <Link 
               to="/admin/users"
-              className="block w-full bg-green-600 hover:bg-green-700 text-white text-center py-2 px-4 rounded-lg transition-colors"
+              className="text-sm text-bronze  dark:text-bronze-dark inline-block"
             >
-              Manage Users <ArrowRight className="w-4 h-4 inline-block ml-1" />
+              {t('homePage.manageUsers')} <ArrowRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
             </Link>
-          </div>
+          </CardApp>
         )}
 
         {/* Statistics */}
         {user?.is_admin && (
-          <div className="bg-white rounded-lg shadow-md border p-6">
-            <div className="flex items-center mb-4">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <BarChart2 className="w-5 h-5 text-white" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 ml-4">Statistics</h3>
-            </div>
-            <p className="text-gray-600 text-sm mb-4">
-              View system usage and performance metrics.
+          <CardApp className="p-6" icon={BarChart2} titulo={t('breadcrumbs.navigation.statistics')}>
+            <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm mb-4">
+              {t('homePage.statisticsDescription')}
             </p>
             <Link 
               to="/admin/stats"
-              className="block w-full bg-purple-600 hover:bg-purple-700 text-white text-center py-2 px-4 rounded-lg transition-colors"
+              className="text-sm text-bronze  dark:text-bronze-dark inline-block"
             >
-              View Stats <ArrowRight className="w-4 h-4 inline-block ml-1" />
+              {t('homePage.viewStats')} <ArrowRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
             </Link>
-          </div>
+          </CardApp>
         )}
 
         {/* About */}
-        <div className="bg-white rounded-lg shadow-md border p-6">
-          <div className="flex items-center mb-4">
-            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-              <Info className="w-5 h-5 text-white" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 ml-4">About</h3>
-          </div>
-          <p className="text-gray-600 text-sm mb-4">
-            Learn more about AI Core Tools and its features.
+        <CardApp className="p-6" icon={Info} titulo={t('breadcrumbs.navigation.about')}>
+          <p className="text-fg-secondary dark:text-fg-secondary-dark text-sm mb-4">
+            {t('homePage.aboutDescription')}
           </p>
           <Link 
             to="/about"
-            className="block w-full bg-gray-600 hover:bg-gray-700 text-white text-center py-2 px-4 rounded-lg transition-colors"
+            className="text-sm text-bronze  dark:text-bronze-dark inline-block"
           >
-            Learn More →
+            {t('homePage.learnMore')} <ArrowRight className="w-4 h-4 inline-block ml-1" aria-hidden="true" />
           </Link>
-        </div>
+        </CardApp>
       </div>
 
       {/* Getting Started Section */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Getting Started</h2>
+      <CardApp variant="canvas" className="p-6" titulo={t('homePage.gettingStartedTitle')}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="flex items-start space-x-3">
-            <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-medium">1</div>
+            <div className="w-6 h-6 bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark text-bronze dark:text-bronze-dark rounded-full flex items-center justify-center text-sm font-medium">1</div>
             <div>
-              <h3 className="font-medium text-gray-900">Create Your First App</h3>
-              <p className="text-sm text-gray-600">Start by creating an AI application to organize your projects.</p>
+              <h3 className="text-sm text-fg dark:text-fg-dark">{t('aboutPage.gettingStarted.createApp')}</h3>
+              <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('homePage.createAppDescription')}</p>
             </div>
           </div>
           <div className="flex items-start space-x-3">
-            <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-medium">2</div>
+            <div className="w-6 h-6 bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark text-bronze dark:text-bronze-dark rounded-full flex items-center justify-center text-sm font-medium">2</div>
             <div>
-              <h3 className="font-medium text-gray-900">Add AI Agents</h3>
-              <p className="text-sm text-gray-600">Configure intelligent agents to handle specific tasks.</p>
+              <h3 className="text-sm text-fg dark:text-fg-dark">{t('homePage.addAiAgents')}</h3>
+              <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('homePage.addAiAgentsDescription')}</p>
             </div>
           </div>
           <div className="flex items-start space-x-3">
-            <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-medium">3</div>
+            <div className="w-6 h-6 bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark text-bronze dark:text-bronze-dark rounded-full flex items-center justify-center text-sm font-medium">3</div>
             <div>
-              <h3 className="font-medium text-gray-900">Connect Data Sources</h3>
-              <p className="text-sm text-gray-600">Link repositories, silos, and domains to your agents.</p>
+              <h3 className="text-sm text-fg dark:text-fg-dark">{t('homePage.connectDataSources')}</h3>
+              <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('homePage.connectDataSourcesDescription')}</p>
             </div>
           </div>
           <div className="flex items-start space-x-3">
-            <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-medium">4</div>
+            <div className="w-6 h-6 bg-bronze-bg-soft dark:bg-bronze-bg-soft-dark text-bronze dark:text-bronze-dark rounded-full flex items-center justify-center text-sm font-medium">4</div>
             <div>
-              <h3 className="font-medium text-gray-900">Deploy & Monitor</h3>
-              <p className="text-sm text-gray-600">Launch your AI solutions and track their performance.</p>
+              <h3 className="text-sm text-fg dark:text-fg-dark">{t('homePage.deployAndMonitor')}</h3>
+              <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{t('homePage.deployAndMonitorDescription')}</p>
             </div>
           </div>
         </div>
-      </div>
+      </CardApp>
     </div>
   );
 }

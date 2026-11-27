@@ -1,9 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, Handshake, Crown } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Mail, Handshake, Crown, BarChart2, LogOut } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
+import { useConfirm } from '../contexts/ConfirmContext';
 import { apiService } from '../services/api';
 import Alert from '../components/ui/Alert';
 import type { MarketplaceQuotaUsage } from '../types/marketplace';
+import { LoadingState } from '../components/ui/LoadingState';
+import { Spinner } from '../components/ui/Spinner';
+import Title from '../components/ui/Title';
+import CardApp from '../components/ui/CardApp';
+import ButtonApp from '../components/ui/ButtonApp';
+import BackgroundImage from '../components/ui/BackgroundImage';
+import { Badge, StatusBadge, type BadgeVariant } from '../components/ui/Badge';
+import UserAvatar from '../components/ui/UserAvatar';
+import ImageUploadControl from '../components/ui/ImageUploadControl';
 
 interface App {
   app_id: number;
@@ -22,8 +33,33 @@ interface PendingInvitation {
   invited_at: string;
 }
 
+const ROLE_BADGE_VARIANTS: Record<string, BadgeVariant> = {
+  administrator: 'secondary',
+  editor: 'info',
+  viewer: 'default',
+};
+
+const LIST_CLASSES = 'divide-y divide-line dark:divide-line-dark';
+const LIST_ITEM_CLASSES = 'py-3 first:pt-0 last:pb-0';
+
+interface EmptyListProps {
+  readonly icon: typeof Mail;
+  readonly message: string;
+}
+
+function EmptyList({ icon, message }: EmptyListProps) {
+  return (
+    <div className="flex flex-col items-center gap-3 py-6 text-center">
+      <BackgroundImage icon={icon} size={64} iconSize={32} />
+      <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">{message}</p>
+    </div>
+  );
+}
+
 const ProfilePage: React.FC = () => {
-  const { user, loading: userLoading } = useUser();
+  const { t, i18n } = useTranslation('common');
+  const confirm = useConfirm();
+  const { user, loading: userLoading, avatarUrl, setUser } = useUser();
   const [collaborations, setCollaborations] = useState<App[]>([]);
   const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,87 +104,106 @@ const ProfilePage: React.FC = () => {
   async function handleRespond(invitationId: number, action: 'accept' | 'decline') {
     try {
       await apiService.respondToInvitation(invitationId, action);
-      setSuccess(`Invitation ${action}ed successfully`);
+      setSuccess(t(`collaborationPage.pendingInvitations.${action}Success`));
       void loadData();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error(err);
-      setError(`Failed to ${action} invitation`);
+      setError(t(`collaborationPage.pendingInvitations.${action}Failed`));
       setTimeout(() => setError(null), 3000);
     }
   }
 
   async function handleLeaveApp(appId: number, appName: string) {
-    if (!globalThis.confirm(`Are you sure you want to leave "${appName}"?`)) {
-      return;
-    }
+    // Same wording as the apps list, including what happens to the member's Chat data.
+    const confirmed = await confirm({
+      title: t('appsPage.confirmLeaveTitle'),
+      message: t('appsPage.confirmLeaveMessage', { name: appName }),
+      confirmLabel: t('appsPage.actions.leaveApp'),
+      cancelLabel: t('cancel'),
+      variant: 'warning',
+    });
+    if (!confirmed) return;
     try {
       await apiService.leaveApp(appId);
-      setSuccess(`Left app "${appName}" successfully`);
+      setSuccess(t('appsPage.appLeftSuccessfully', { name: appName }));
       void loadData();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error(err);
-      setError('Failed to leave app');
+      setError(t('appsPage.appLeaveFailed', { name: appName }));
       setTimeout(() => setError(null), 3000);
     }
   }
 
-  const getUserInitials = (name?: string, email?: string) => {
-    if (name) {
-      return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-    }
-    if (email) {
-      return email[0].toUpperCase().slice(0, 2);
-    }
-    return 'U';
-  };
+  function showError(message: string) {
+    setError(message);
+    setTimeout(() => setError(null), 3000);
+  }
 
-  const getRoleBadgeClass = (role: string) => {
-    switch (role) {
-      case 'administrator':
-        return 'bg-purple-100 text-purple-800';
-      case 'editor':
-        return 'bg-blue-100 text-blue-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
+  function showSuccess(message: string) {
+    setSuccess(message);
+    setTimeout(() => setSuccess(null), 3000);
+  }
+
+  async function uploadAvatar(file: File) {
+    if (!user) return;
+    const { image_updated_at } = await apiService.uploadMyAvatar(file);
+    setUser({ ...user, avatar_updated_at: image_updated_at });
+  }
+
+  async function removeAvatar() {
+    if (!user) return;
+    await apiService.deleteMyAvatar();
+    setUser({ ...user, avatar_updated_at: null });
+  }
+
+  const getRoleLabel = (role: string) => t(`collaborationPage.roles.${role.toLowerCase()}`, {
+    defaultValue: role.charAt(0).toUpperCase() + role.slice(1),
+  });
+
+  const getRoleBadgeVariant = (role: string): BadgeVariant => ROLE_BADGE_VARIANTS[role.toLowerCase()] ?? 'default';
 
   const renderQuotaContent = () => {
     if (!quotaUsage) {
       return (
-        <div className="flex items-center space-x-2 text-sm text-gray-400">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
-          <span>Loading...</span>
+        <div className="flex items-center gap-2 text-sm text-fg-tertiary dark:text-fg-tertiary-dark">
+          <Spinner size="sm" tone="muted" />
+          <span>{t('profilePage.usage.loading')}</span>
         </div>
       );
     }
     if (quotaUsage.is_exempt) {
-      return <p className="text-sm font-medium text-blue-600">Exempt (Admin)</p>;
+      return <Badge variant="info" label={t('profilePage.usage.exempt')} />;
     }
     if (quotaUsage.quota === 0) {
       return (
-        <p className="text-sm text-gray-600">
-          <span className="font-semibold text-gray-900">{quotaUsage.call_count}</span> / Unlimited
+        <p className="text-sm text-fg-secondary dark:text-fg-secondary-dark">
+          <span className="font-medium text-fg dark:text-fg-dark">{quotaUsage.call_count}</span> / {t('profilePage.usage.unlimited')}
         </p>
       );
     }
     const atLimit = quotaUsage.call_count >= quotaUsage.quota;
+    const percentage = Math.min(100, (quotaUsage.call_count / quotaUsage.quota) * 100);
     return (
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <p className={`text-sm font-semibold ${atLimit ? 'text-red-600' : 'text-gray-900'}`}>
+        <div className="mb-2 flex items-center justify-between">
+          <p className={`text-sm font-medium ${atLimit ? 'text-error dark:text-error-dark' : 'text-fg dark:text-fg-dark'}`}>
             {quotaUsage.call_count} / {quotaUsage.quota}
           </p>
-          {atLimit && (
-            <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">Limit reached</span>
-          )}
+          {atLimit && <Badge variant="error" label={t('profilePage.usage.limitReached')} />}
         </div>
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          role="progressbar"
+          aria-label={t('profilePage.usage.title')}
+          aria-valuemin={0}
+          aria-valuemax={quotaUsage.quota}
+          aria-valuenow={Math.min(quotaUsage.call_count, quotaUsage.quota)}
+          className="h-2 overflow-hidden rounded-full bg-surface-hover dark:bg-surface-hover-dark"
+        >
           <div
-            className={`h-2 rounded-full transition-all ${atLimit ? 'bg-red-500' : 'bg-indigo-500'}`}
-            style={{ width: `${Math.min(100, (quotaUsage.call_count / quotaUsage.quota) * 100)}%` }}
+            className={`h-2 rounded-full transition-all ${atLimit ? 'bg-error dark:bg-error-dark' : 'bg-ink dark:bg-ink-dark'}`}
+            style={{ width: `${percentage}%` }}
           />
         </div>
       </div>
@@ -157,211 +212,171 @@ const ProfilePage: React.FC = () => {
 
   if (userLoading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-      </div>
+      <LoadingState variant="page" />
     );
   }
 
   if (!user) {
     return (
-      <div className="p-6">
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
-          <strong className="font-bold">Error: </strong>
-          <span className="block sm:inline">User not found. Please log in.</span>
-        </div>
-      </div>
+      <Alert type="error" message={t('profilePage.userNotFound')} />
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="mx-auto max-w-4xl space-y-6">
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess(null)} />}
       {error && <Alert type="error" message={error} onDismiss={() => setError(null)} />}
 
+      <Title variant="titSecundario" titulo={t('profilePage.title')} subtitulo={t('profilePage.subtitle')} />
+
       {/* Profile Header */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="h-32 bg-gradient-to-r from-indigo-500 to-purple-600"></div>
-        <div className="px-6 pb-6">
-          <div className="relative flex items-end -mt-6 mb-4">
-            <div className="h-24 w-24 rounded-2xl bg-white p-1 shadow-lg">
-              <div className="h-full w-full rounded-xl bg-indigo-100 flex items-center justify-center text-2xl font-bold text-indigo-600">
-                {getUserInitials(user.name, user.email)}
-              </div>
-            </div>
-            <div className="ml-4 mb-1">
-              <h1 className="text-2xl font-bold text-gray-900">{user.name || 'User'}</h1>
-              <p className="text-sm text-gray-500">{user.email}</p>
+      <CardApp className="p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            <UserAvatar name={user.name} email={user.email} src={avatarUrl} size={64} />
+            <div className="min-w-0">
+              <h2 className="truncate font-display text-xl font-medium text-fg dark:text-fg-dark">{user.name || t('header.userFallback')}</h2>
+              <p className="truncate text-sm text-fg-secondary dark:text-fg-secondary-dark">{user.email}</p>
             </div>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border-t border-gray-100 pt-6">
-            <div className="text-center">
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</dt>
-              <dd className="mt-1 text-sm font-semibold text-gray-900">#{user.user_id}</dd>
-            </div>
-            <div className="text-center">
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Account Type</dt>
-              <dd className="mt-1 text-sm font-semibold text-gray-900">Standard User</dd>
-            </div>
-            <div className="text-center">
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wider">Status</dt>
-              <dd className="mt-1 text-sm font-semibold text-green-600 flex items-center justify-center">
-                <span className="h-2 w-2 bg-green-500 rounded-full mr-2"></span>Active
-              </dd>
-            </div>
-          </div>
+          <ImageUploadControl
+            className="sm:items-end"
+            hasImage={Boolean(user.avatar_updated_at)}
+            inputLabel={t('profilePage.avatar.inputLabel')}
+            onUpload={uploadAvatar}
+            onRemove={removeAvatar}
+            onSuccess={showSuccess}
+            onError={showError}
+          />
         </div>
-      </div>
+
+        <dl className="mt-6 grid grid-cols-1 gap-4 border-t border-line pt-6 dark:border-line-dark sm:grid-cols-3">
+          <div>
+            <dt className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{t('profilePage.account.userId')}</dt>
+            <dd className="mt-1 text-sm font-medium text-fg dark:text-fg-dark">#{user.user_id}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{t('profilePage.account.type')}</dt>
+            <dd className="mt-1 text-sm font-medium text-fg dark:text-fg-dark">{t('profilePage.account.standardUser')}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">{t('profilePage.account.status')}</dt>
+            <dd className="mt-1">
+              <StatusBadge status="active" customLabel={t('collaborationPage.status.active')} />
+            </dd>
+          </div>
+        </dl>
+      </CardApp>
 
       {/* Marketplace Call Usage */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-          <span className="bg-indigo-100 text-indigo-600 p-2 rounded-lg mr-3">📊</span>Marketplace Call Usage (Current Month)
-        </h2>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          {renderQuotaContent()}
-        </div>
-      </div>
+      <CardApp
+        className="p-6"
+        icon={BarChart2}
+        titulo={t('profilePage.usage.title')}
+        subtitulo={t('profilePage.usage.subtitle')}
+      >
+        {renderQuotaContent()}
+      </CardApp>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Pending Invitations */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-              <span className="bg-yellow-100 text-yellow-600 p-2 rounded-lg mr-3"><Mail className="w-5 h-5" /></span>Pending Invitations
-            </h2>
-            {invitations.length > 0 && (
-              <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                {invitations.length}
-              </span>
-            )}
-          </div>
-          
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            {loading && (
-              <div className="p-8 text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-                <p className="mt-2 text-sm text-gray-500">Loading invitations...</p>
-              </div>
-            )}
-            {!loading && invitations.length > 0 && (
-              <ul className="divide-y divide-gray-100">
-                {invitations.map((invitation) => (
-                  <li key={invitation.id} className="p-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex flex-col space-y-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="text-sm font-semibold text-gray-900">{invitation.app_name}</h4>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Invited by <span className="font-medium text-gray-700">{invitation.inviter_email}</span>
-                          </p>
-                        </div>
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 capitalize">
-                          {invitation.role}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between pt-2">
-                        <span className="text-xs text-gray-400">
-                          {new Date(invitation.invited_at).toLocaleDateString()}
-                        </span>
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleRespond(invitation.id, 'decline')}
-                            className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
-                          >
-                            Decline
-                          </button>
-                          <button
-                            onClick={() => handleRespond(invitation.id, 'accept')}
-                            className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 border border-transparent rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors shadow-sm"
-                          >
-                            Accept
-                          </button>
-                        </div>
-                      </div>
+        <CardApp
+          className="p-6"
+          icon={Mail}
+          titulo={t('profilePage.invitations.title')}
+          headerExtra={invitations.length > 0 ? <Badge variant="warning" label={String(invitations.length)} /> : undefined}
+        >
+          {loading && (
+            <LoadingState variant="section" message={t('profilePage.invitations.loading')} />
+          )}
+          {!loading && invitations.length > 0 && (
+            <ul className={LIST_CLASSES}>
+              {invitations.map((invitation) => (
+                <li key={invitation.id} className={LIST_ITEM_CLASSES}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-medium text-fg dark:text-fg-dark">{invitation.app_name}</h3>
+                      <p className="mt-0.5 truncate text-xs text-fg-secondary dark:text-fg-secondary-dark">
+                        {t('profilePage.invitations.invitedBy', { email: invitation.inviter_email })}
+                      </p>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {!loading && invitations.length === 0 && (
-              <div className="p-8 text-center">
-                <div className="mx-auto h-12 w-12 text-gray-300 mb-3">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                  </svg>
-                </div>
-                <p className="text-sm text-gray-500">No pending invitations</p>
-              </div>
-            )}
-          </div>
-        </div>
+                    <Badge variant={getRoleBadgeVariant(invitation.role)} label={getRoleLabel(invitation.role)} className="shrink-0" />
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs text-fg-tertiary dark:text-fg-tertiary-dark">
+                      {new Date(invitation.invited_at).toLocaleDateString(i18n.resolvedLanguage)}
+                    </span>
+                    <div className="flex gap-2">
+                      <ButtonApp
+                        label={t('collaborationPage.pendingInvitations.decline')}
+                        ariaLabel={t('profilePage.invitations.declineAria', { name: invitation.app_name })}
+                        variant="secondary"
+                        size="small"
+                        onClick={() => handleRespond(invitation.id, 'decline')}
+                      />
+                      <ButtonApp
+                        label={t('collaborationPage.pendingInvitations.accept')}
+                        ariaLabel={t('profilePage.invitations.acceptAria', { name: invitation.app_name })}
+                        variant="primary"
+                        size="small"
+                        onClick={() => handleRespond(invitation.id, 'accept')}
+                      />
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {!loading && invitations.length === 0 && (
+            <EmptyList icon={Mail} message={t('profilePage.invitations.empty')} />
+          )}
+        </CardApp>
 
         {/* Active Collaborations */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-              <span className="bg-blue-100 text-blue-600 p-2 rounded-lg mr-3"><Handshake className="w-5 h-5" /></span>Active Collaborations
-            </h2>
-            {collaborations.length > 0 && (
-              <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                {collaborations.length}
-              </span>
-            )}
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            {loading && (
-              <div className="p-8 text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-2 text-sm text-gray-500">Loading collaborations...</p>
-              </div>
-            )}
-            {!loading && collaborations.length > 0 && (
-              <ul className="divide-y divide-gray-100">
-                {collaborations.map((app) => (
-                  <li key={app.app_id} className="p-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <h4 className="text-sm font-semibold text-gray-900 truncate">{app.name}</h4>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getRoleBadgeClass(app.role)}`}>
-                            {app.role}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-gray-500 flex items-center">
-                          <Crown className="w-4 h-4 mr-1 inline-block" />
-                          {app.owner_name || app.owner_email || 'Unknown'}
-                        </p>
+        <CardApp
+          className="p-6"
+          icon={Handshake}
+          titulo={t('profilePage.collaborations.title')}
+          headerExtra={collaborations.length > 0 ? <Badge variant="secondary" label={String(collaborations.length)} /> : undefined}
+        >
+          {loading && (
+            <LoadingState variant="section" message={t('profilePage.collaborations.loading')} />
+          )}
+          {!loading && collaborations.length > 0 && (
+            <ul className={LIST_CLASSES}>
+              {collaborations.map((app) => (
+                <li key={app.app_id} className={LIST_ITEM_CLASSES}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="truncate text-sm font-medium text-fg dark:text-fg-dark">{app.name}</h3>
+                        <Badge variant={getRoleBadgeVariant(app.role)} label={getRoleLabel(app.role)} className="shrink-0" />
                       </div>
-                      <button
-                        onClick={() => handleLeaveApp(app.app_id, app.name)}
-                        className="ml-4 p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Leave App"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                      </button>
+                      <p className="mt-1 flex items-center gap-1 text-xs text-fg-secondary dark:text-fg-secondary-dark">
+                        <Crown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="sr-only">{t('collaborationPage.roles.owner')}:</span>
+                        <span className="truncate">{app.owner_name || app.owner_email || t('collaborationPage.unknown')}</span>
+                      </p>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {!loading && collaborations.length === 0 && (
-              <div className="p-8 text-center">
-                <div className="mx-auto h-12 w-12 text-gray-300 mb-3">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-                <p className="text-sm text-gray-500">No active collaborations</p>
-              </div>
-            )}
-          </div>
-        </div>
+                    <ButtonApp
+                      label={t('appsPage.actions.leaveApp')}
+                      ariaLabel={t('profilePage.collaborations.leaveAria', { name: app.name })}
+                      variant="danger"
+                      size="small"
+                      icon={<LogOut className="h-3.5 w-3.5" aria-hidden="true" />}
+                      onClick={() => handleLeaveApp(app.app_id, app.name)}
+                      className="shrink-0"
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {!loading && collaborations.length === 0 && (
+            <EmptyList icon={Handshake} message={t('profilePage.collaborations.empty')} />
+          )}
+        </CardApp>
       </div>
     </div>
   );

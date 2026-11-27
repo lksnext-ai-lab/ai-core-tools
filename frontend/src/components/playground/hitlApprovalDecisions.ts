@@ -1,10 +1,16 @@
 import type { HitlAction, HitlDecision } from '../../types/streaming';
 
 export type HitlActionChoice = 'approve' | 'reject';
+export type HitlDecisionError =
+  | 'rejectNotAllowed'
+  | 'approveNotAllowed'
+  | 'invalidJson'
+  | 'jsonObjectRequired'
+  | 'editedArgumentsRequired';
 
 export interface HitlDecisionBuildResult {
   readonly decisions: HitlDecision[] | null;
-  readonly errors: (string | null)[];
+  readonly errors: (HitlDecisionError | null)[];
 }
 
 export function buildHitlDecisions(
@@ -12,7 +18,7 @@ export function buildHitlDecisions(
   drafts: readonly string[],
   choices: readonly (HitlActionChoice | null)[],
 ): HitlDecisionBuildResult {
-  const errors = actions.map(() => null as string | null);
+  const errors = actions.map(() => null as HitlDecisionError | null);
   const decisions: HitlDecision[] = [];
   let complete = true;
 
@@ -25,7 +31,7 @@ export function buildHitlDecisions(
 
     if (choice === 'reject') {
       if (!action.allowed_decisions.includes('reject')) {
-        errors[index] = 'This tool does not allow rejection.';
+        errors[index] = 'rejectNotAllowed';
         return;
       }
       decisions.push({
@@ -37,7 +43,7 @@ export function buildHitlDecisions(
     }
 
     if (!action.allowed_decisions.includes('approve') && !action.allowed_decisions.includes('edit')) {
-      errors[index] = 'This tool does not allow approval.';
+      errors[index] = 'approveNotAllowed';
       return;
     }
     if (!action.allowed_decisions.includes('edit')) {
@@ -49,11 +55,11 @@ export function buildHitlDecisions(
     try {
       args = JSON.parse(drafts[index] ?? '');
     } catch {
-      errors[index] = 'Arguments must be valid JSON.';
+      errors[index] = 'invalidJson';
       return;
     }
     if (typeof args !== 'object' || args === null || Array.isArray(args)) {
-      errors[index] = 'Arguments must be a JSON object.';
+      errors[index] = 'jsonObjectRequired';
       return;
     }
 
@@ -66,7 +72,7 @@ export function buildHitlDecisions(
     } else if (action.allowed_decisions.includes('approve')) {
       decisions.push({ action_id: action.action_id, type: 'approve' });
     } else {
-      errors[index] = 'This tool only accepts edited arguments.';
+      errors[index] = 'editedArgumentsRequired';
     }
   });
 

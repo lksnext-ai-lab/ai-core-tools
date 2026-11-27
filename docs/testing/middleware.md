@@ -13,7 +13,7 @@ that an agent runs around every model and tool call. They are created under
 | `human_in_the_loop` | `HumanInTheLoopMiddleware` | `interrupt_on: {tool_name: {allowed_decisions: [approve, edit, reject]}}`, `description_prefix`, `approval_timeout_seconds` (60 – `HITL_MAX_APPROVAL_TTL_SECONDS`, default 3600) |
 | `model_call_limit` | `ModelCallLimitMiddleware(run_limit=max_calls)` | `max_calls` 1–10000 |
 | `tool_call_limit` | `ToolCallLimitMiddleware(run_limit=max_calls)` | `max_calls` 1–10000 |
-| `summarization` | `SummarizationMiddleware` (replaces the default one of agents with memory) | `summarization_model` (`agent_llm` or `ai_service:<id>` of the same app), `trigger_tokens` (empty = 85% of the model window, max 150k; 32k without a model profile), `keep_messages` (default 20), `trim_tokens` (empty = no limit) |
+| `summarization` | `SummarizationMiddleware` (replaces the default one of agents with memory) | `summarization_model` (`agent_llm` or `ai_service:<id>` of the same app), `trigger_tokens` (empty = 85% of the model window, max 150k; 32k without a model profile), `keep_messages` (default 20), `trim_tokens` (empty = automatic: the older history is sent whole while it fits the summary model's window minus an overhead, so history that grew on one model is never trimmed; above that it is cut to about 80% of the window, keeping the earlier summary; a model without a profile is not bounded, except in the App Chat, which assumes about 37.6k; an explicit value wins). The summary call is retried only on transient errors (HTTP 4xx other than 408/429 are tried once) |
 
 The chain is built in `backend/tools/middleware/factory.py`. Summarization always runs first; the
 rest follow the agent's order (`agent_middlewares.order`).
@@ -123,6 +123,8 @@ using it, with memory on.
 | Approval endpoints (requester only, invalid decisions, expired) | `tests/integration/routers/test_approval_routers.py` |
 | Expiry sweeper (advisory lock, failures, stuck transitions) | `tests/unit/services/test_hitl_expiry_worker.py` |
 | Summarization defaults, chain of agents used as tools | `tests/unit/tools/test_middleware_factory.py` |
+| Summary input bound, explicit `trim_tokens`, retry only on transient errors | `tests/unit/tools/middleware/test_summary_input_bound.py` |
+| Chat history adaptation across models (own vs foreign messages, interrupted tool calls) | `tests/unit/tools/middleware/test_history_normalizer.py` |
 | Approval ownership, action ids, decision validation, expiry status | `tests/unit/services/test_hitl_approval_service.py` |
 | Claim compare-and-set, one pending approval per conversation, cascade | `tests/integration/repositories/test_hitl_approval_repository.py` |
 | Streaming pause / resume / stale / non-interactive channel / busy conversation | `tests/unit/services/test_agent_streaming_service.py` |

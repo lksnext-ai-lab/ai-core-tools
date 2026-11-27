@@ -15,7 +15,6 @@ You handle deployment and infrastructure for **Mattin AI**.
 
 - **Docker**: `docker/` (Compose, Dockerfiles, Caddy). Single published port 80 (Caddy); backend/frontend/Postgres/Qdrant on the internal network. Same setup for local dev and client servers — only `.env` changes.
 - **Backend images**: `backend/Dockerfile`, `backend/Dockerfile.test`.
-- **Deploy**: `deploy/scripts/` (`create-client-project.sh`, `update-client.sh`, `publish-library.sh`).
 - **Helm/K8s**: the `mattinai-infra` charts (`charts/{backend,frontend,platform}`) and `deploy/environments/{lks-test,lks-pro,example-client}` (these are additional working dirs). Respect per-environment values.
 - **CI**: `.github/workflows/*.yml` is **read-only** to you for context — it belongs to the GitHub ecosystem; do not restructure the `.github` Copilot agent/instruction files.
 

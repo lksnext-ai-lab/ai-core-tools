@@ -50,7 +50,7 @@ class _FakeProvider:
         self.requires_file_sync = requires_file_sync
         self.create_sandbox = MagicMock()
         self.write_file = MagicMock()
-        self.read_file = MagicMock(return_value=b"DATA")
+        self.read_file_limited = MagicMock(return_value=b"DATA")
         self.list_files = MagicMock(return_value=[])
         self.run_code = MagicMock(return_value="OK")
         self.get_supported_languages = MagicMock(return_value=[])
@@ -58,6 +58,7 @@ class _FakeProvider:
 
 def _make_agent(enable_code_interpreter: bool = True, has_memory: bool = False):
     agent = MagicMock()
+    agent.is_internal_chat = False  # a bare MagicMock attribute would be truthy
     agent.agent_id = 7
     agent.name = "TestAgent"
     agent.type = "agent"
@@ -531,7 +532,7 @@ class TestFinalizeTurnFilePull:
     def test_pulls_new_remote_file(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
         ctx.sandbox_provider.list_files.return_value = ["/workspace/output/report.docx"]
-        ctx.sandbox_provider.read_file.return_value = b"DOCX_BYTES"
+        ctx.sandbox_provider.read_file_limited.return_value = b"DOCX_BYTES"
         ctx.pre_existing_remote_files = set()
 
         _run_finalize(ctx, tmp_path)
@@ -543,7 +544,7 @@ class TestFinalizeTurnFilePull:
     def test_pulls_new_remote_file_from_bare_filename(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
         ctx.sandbox_provider.list_files.return_value = ["output/report.docx"]
-        ctx.sandbox_provider.read_file.return_value = b"DOCX_BYTES"
+        ctx.sandbox_provider.read_file_limited.return_value = b"DOCX_BYTES"
         ctx.pre_existing_remote_files = set()
 
         _run_finalize(ctx, tmp_path)
@@ -551,8 +552,8 @@ class TestFinalizeTurnFilePull:
         dest = tmp_path / "output" / "report.docx"
         assert dest.exists()
         assert dest.read_bytes() == b"DOCX_BYTES"
-        ctx.sandbox_provider.read_file.assert_called_once_with(
-            ctx.sandbox_handle, "output/report.docx"
+        ctx.sandbox_provider.read_file_limited.assert_called_once_with(
+            ctx.sandbox_handle, "output/report.docx", __import__("config").SANDBOX_PULL_MAX_FILE_BYTES
         )
 
     def test_pulls_new_remote_file_with_daytona_workspace_prefix(self, tmp_path):
@@ -566,7 +567,7 @@ class TestFinalizeTurnFilePull:
         ctx.sandbox_provider.list_files.return_value = [
             "/home/daytona/workspace/output/animal_names.csv"
         ]
-        ctx.sandbox_provider.read_file.return_value = b"CSV_BYTES"
+        ctx.sandbox_provider.read_file_limited.return_value = b"CSV_BYTES"
         ctx.pre_existing_remote_files = set()
 
         _run_finalize(ctx, tmp_path)
@@ -578,7 +579,7 @@ class TestFinalizeTurnFilePull:
     def test_skips_pre_existing_remote_file(self, tmp_path):
         ctx = _base_ctx(str(tmp_path), provider_name="opensandbox")
         ctx.sandbox_provider.list_files.return_value = ["/workspace/output/old.txt"]
-        ctx.sandbox_provider.read_file.return_value = b"OLD"
+        ctx.sandbox_provider.read_file_limited.return_value = b"OLD"
         ctx.pre_existing_remote_files = {"output/old.txt"}
 
         _run_finalize(ctx, tmp_path)
@@ -592,7 +593,7 @@ class TestFinalizeTurnFilePull:
             "/workspace/work/package.json",
             "/workspace/output/output.xlsx",
         ]
-        ctx.sandbox_provider.read_file.return_value = b"DATA"
+        ctx.sandbox_provider.read_file_limited.return_value = b"DATA"
         ctx.pre_existing_remote_files = set()
 
         _run_finalize(ctx, tmp_path)
@@ -611,13 +612,13 @@ class TestFinalizeTurnFilePull:
             # Hidden file inside /workspace/ — basename starts with .
             "/workspace/output/.hidden",
         ]
-        ctx.sandbox_provider.read_file.return_value = b"EVIL"
+        ctx.sandbox_provider.read_file_limited.return_value = b"EVIL"
         ctx.pre_existing_remote_files = set()
 
         _run_finalize(ctx, tmp_path)
 
         # read_file should never have been called for these unsafe paths
-        ctx.sandbox_provider.read_file.assert_not_called()
+        ctx.sandbox_provider.read_file_limited.assert_not_called()
         # No files written
         assert not (tmp_path / "output" / "passwd").exists()
         assert not (tmp_path / "output" / ".hidden").exists()
@@ -627,7 +628,7 @@ class TestFinalizeTurnFilePull:
         (files already live directly on the shared local working_dir)."""
         fake_provider = _FakeProvider(requires_file_sync=False)
         fake_provider.list_files.return_value = ["report.docx"]
-        fake_provider.read_file.return_value = b"DATA"
+        fake_provider.read_file_limited.return_value = b"DATA"
         ctx = _base_ctx(str(tmp_path), provider_name=_FakeProvider.PROVIDER_NAME, provider=fake_provider)
 
         _run_finalize(ctx, tmp_path)
@@ -656,7 +657,7 @@ class TestFinalizeTurnFilePull:
             "/workspace/output/good.txt",
             "/workspace/output/bad.bin",
         ]
-        ctx.sandbox_provider.read_file.side_effect = lambda handle, path: (
+        ctx.sandbox_provider.read_file_limited.side_effect = lambda handle, path, max_bytes: (
             b"GOOD" if "good" in path else (_ for _ in ()).throw(IOError("disk full"))
         )
         ctx.pre_existing_remote_files = set()
@@ -735,7 +736,7 @@ class TestRequiresFileSyncTruePath:
 
         # Pull half: a new remote output file should be pulled into working_dir.
         fake_provider.list_files.return_value = ["/workspace/output/report.docx"]
-        fake_provider.read_file.return_value = b"DOCX_BYTES"
+        fake_provider.read_file_limited.return_value = b"DOCX_BYTES"
         ctx.pre_existing_remote_files = set()
 
         _run_finalize(ctx, tmp_path)

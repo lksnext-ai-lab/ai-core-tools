@@ -1,4 +1,5 @@
 import React from 'react';
+import { ButtonApp } from '../ui/ButtonApp';
 import { LoadingState } from '../ui/LoadingState';
 import { ErrorState } from '../ui/ErrorState';
 
@@ -49,17 +50,17 @@ export function SettingsPageWrapper({
       {/* Header */}
       <div className={`flex justify-between items-center mb-6 ${headerClassName}`}>
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
-          <p className="text-gray-600">{description}</p>
+          <h2 className="text-xl font-semibold text-fg dark:text-fg-dark">{title}</h2>
+          <p className="text-fg-subtle dark:text-fg-subtle-dark">{description}</p>
         </div>
         {showAddButton && onAdd && (
-          <button 
+          <ButtonApp
+            label={addButtonLabel}
             onClick={onAdd}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors"
-          >
-            <span className="mr-2">+</span>
-            {addButtonLabel}
-          </button>
+            variant="primary"
+            size="medium"
+            icon={<span aria-hidden="true">+</span>}
+          />
         )}
       </div>
 

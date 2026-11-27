@@ -122,6 +122,30 @@ class AppCollaborationService:
             logger.error(f"Error updating role for user {user_id} in app {app_id}: {str(e)}")
             raise
 
+    def _delete_collaboration_with_chat_cleanup(self, collaboration, app_id: int, user_id: int) -> bool:
+        """Delete the collaboration and the user's App Chat data of THAT App (same stage / finish as user deletion).
+
+        The user's Chat conversation rows go in the same transaction as the collaboration (commit ordering as in user
+        deletion); their threads, files, temp silo / vectors and sandboxes are removed after the commit, best effort
+        (a failure is logged by class name and never fails the removal). Other members' data and the same user's
+        data in other Apps are untouched.
+        """
+        from services.internal_chat.user_cleanup import (
+            finish_user_chat_conversations,
+            stage_user_chat_conversations,
+        )
+
+        staged = []
+        try:
+            staged = stage_user_chat_conversations(self.db, user_id, app_id=app_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Could not stage the chat cleanup of user %s in app %s (%s)", user_id, app_id, type(exc).__name__)
+            self.db.rollback()
+        success = self.repo.delete_collaboration(collaboration)
+        if success and staged:
+            finish_user_chat_conversations(self.db, user_id, staged)  # best effort, never raises
+        return success
+
     def remove_collaborator(self, app_id: int, user_id: int, removed_by_user_id: int) -> bool:
         """Remove a collaborator from an app."""
         try:
@@ -132,7 +156,7 @@ class AppCollaborationService:
             if not collaboration:
                 raise ValueError("Collaboration not found")
 
-            success = self.repo.delete_collaboration(collaboration)
+            success = self._delete_collaboration_with_chat_cleanup(collaboration, app_id, user_id)
 
             if success:
                 logger.info(f"Removed user {user_id} from app {app_id}")
@@ -156,7 +180,7 @@ class AppCollaborationService:
             if collaboration.status != CollaborationStatus.ACCEPTED:
                 raise ValueError("Can only leave accepted collaborations")
 
-            success = self.repo.delete_collaboration(collaboration)
+            success = self._delete_collaboration_with_chat_cleanup(collaboration, app_id, user_id)
 
             if success:
                 logger.info(f"User {user_id} left app {app_id}")

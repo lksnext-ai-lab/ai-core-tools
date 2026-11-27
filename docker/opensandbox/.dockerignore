@@ -1,3 +1,4 @@
 *
 !Dockerfile
 !sandbox.toml
+!entrypoint.py

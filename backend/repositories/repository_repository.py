@@ -1,10 +1,16 @@
 from sqlalchemy.orm import Session, joinedload
-from models.repository import Repository
+from sqlalchemy import or_
+from models.repository import PLAYGROUND_MEDIA_REPO_TYPE, Repository
 from typing import List, Optional
 
 
 class RepositoryRepository:
-    
+
+    @staticmethod
+    def visible_clause():
+        """SQL clause: the repository is NOT the hidden temp repository of a playground / Chat conversation."""
+        return or_(Repository.type.is_(None), Repository.type != PLAYGROUND_MEDIA_REPO_TYPE)
+
     @staticmethod
     def get_by_id(db: Session, repository_id: int) -> Optional[Repository]:
         """
@@ -27,7 +33,7 @@ class RepositoryRepository:
     @staticmethod
     def get_by_app_id(db: Session, app_id: int) -> List[Repository]:
         """
-        Get all repositories by app ID
+        Get the user-visible repositories of an app (hidden temp repositories of conversations are excluded)
         
         Args:
             db: Database session
@@ -39,7 +45,7 @@ class RepositoryRepository:
         return (
             db.query(Repository)
             .options(joinedload(Repository.silo))
-            .filter(Repository.app_id == app_id)
+            .filter(Repository.app_id == app_id, RepositoryRepository.visible_clause())
             .all()
         )
     

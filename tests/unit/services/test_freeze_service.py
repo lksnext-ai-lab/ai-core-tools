@@ -145,7 +145,7 @@ class TestApplyFreeze:
                     return f
                 q.filter.side_effect = agent_filter
             elif model_cls is Silo:
-                def silo_filter(cond):
+                def silo_filter(cond, *more):
                     f = MagicMock()
                     for aid, silo_list in silos_per_app.items():
                         f.order_by.return_value.all.return_value = silo_list
